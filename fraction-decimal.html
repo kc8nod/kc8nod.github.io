@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Nested Fraction Donut Chart</title>
+<style>
+  body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    background: #f5f5f5;
+  }
+  canvas {
+    background: white;
+    border-radius: 8px;
+  }
+</style>
+</head>
+<body>
+
+<canvas id="chart" width="800" height="800"></canvas>
+
+<script>
+const canvas = document.getElementById("chart");
+const ctx = canvas.getContext("2d");
+
+const cx = canvas.width / 2;
+const cy = canvas.height / 2;
+
+// Rings from 1/2 → 1/32
+const fractionRings = [
+  2,  // 1/2
+  4,  // 1/4
+  8,  // 1/8
+  16, // 1/16
+  32  // 1/32
+];
+
+// Canvas parameters
+const totalRings = fractionRings.length + 1;
+const outermostRadius = 350;
+const holeRadius = 100;
+const ringSpacing = (outermostRadius - holeRadius) / totalRings; // equal ring widths
+
+// GCD function
+function gcd(a, b) {
+  while (b !== 0) {
+    [a, b] = [b, a % b];
+  }
+  return a;
+}
+
+// Generate a color palette for a ring (HSL hues evenly spaced)
+function getRingColors(slices) {
+  const colors = [];
+  for (let i = 0; i < slices; i++) {
+    const hue = (i * 360 / slices) % 360; // even spacing
+    colors.push(`hsl(${hue}, 70%, 60%)`);
+  }
+  return colors;
+}
+
+// Store labels to draw on top of all slices
+const labels = [];
+
+// Draw all slices first
+fractionRings.forEach((slices, ringIndex) => {
+  const innerRadius = ringIndex * ringSpacing + holeRadius; // add some padding for inner rings
+  const outerRadius = innerRadius + ringSpacing;
+  const sliceAngle = (2 * Math.PI) / slices;
+
+  const colors = getRingColors(slices); // unique colors for each ring
+
+  for (let i = 1; i <= slices; i++) {
+    const startAngle = -Math.PI / 2 + (i - 1) * sliceAngle;
+    const endAngle = startAngle + sliceAngle;
+
+    // Draw slice
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, outerRadius, startAngle, endAngle);
+    ctx.arc(cx, cy, innerRadius, endAngle, startAngle, true);
+    ctx.closePath();
+    ctx.fillStyle = colors[i - 1];
+    ctx.fill();
+
+    // Store label info for later (include corner angle and outerRadius for leader line)
+    if (gcd(i, slices) === 1) {
+      const angle = startAngle + sliceAngle; // where label will sit (slightly clockwise of center)
+      const labelRadius = (innerRadius + outerRadius) / 2;
+      const labelX = cx + labelRadius * Math.cos(angle);
+      const labelY = cy + labelRadius * Math.sin(angle);
+      labels.push({
+        text: `${i}/${slices}`,
+        x: labelX,
+        y: labelY,
+        ringIndex: ringIndex,
+        cornerAngle: angle,
+        outerRadius: outerRadius
+      });
+    }
+  }
+});
+
+// Draw leader lines from each labeled slice's outer, most-clockwise corner
+labels.forEach(label => {
+  const lineStartRadius = (label.outerRadius - ringSpacing/5);
+  const lineEndRadius = outermostRadius + 5; // extend a bit beyond the slice
+  const x1 = cx + lineStartRadius * Math.cos(label.cornerAngle);
+  const y1 = cy + lineStartRadius * Math.sin(label.cornerAngle);
+  const x2 = cx + lineEndRadius * Math.cos(label.cornerAngle);
+  const y2 = cy + lineEndRadius * Math.sin(label.cornerAngle);
+  ctx.strokeStyle = "rgba(0,0,0,0.6)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
+});
+
+// Draw all labels on top
+labels.forEach(label => {
+  ctx.fillStyle = "#000";
+  ctx.font = label.ringIndex < 2 ? "16px Arial" : "12px Arial";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(label.text, label.x, label.y);
+});
+</script>
+
+</body>
+</html>
