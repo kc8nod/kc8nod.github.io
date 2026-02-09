@@ -461,6 +461,54 @@ document.getElementById('zoomIn').addEventListener('click', () => zoomBy(1.2));
 document.getElementById('zoomOut').addEventListener('click', () => zoomBy(1 / 1.2));
 document.getElementById('zoomReset').addEventListener('click', resetZoom);
 
+// Touchpad pinch zoom support (wheel event with ctrlKey)
+svg.addEventListener('wheel', (event) => {
+  if (event.ctrlKey) {
+    event.preventDefault();
+    const delta = -event.deltaY;
+    const factor = delta > 0 ? 1.05 : 1 / 1.05;
+    zoomBy(factor);
+  }
+}, { passive: false });
+
+// Touch screen pinch zoom support
+let initialPinchDistance = null;
+let lastPinchDistance = null;
+
+function getTouchDistance(touch1, touch2) {
+  const dx = touch1.clientX - touch2.clientX;
+  const dy = touch1.clientY - touch2.clientY;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+svg.addEventListener('touchstart', (event) => {
+  if (event.touches.length === 2) {
+    event.preventDefault();
+    initialPinchDistance = getTouchDistance(event.touches[0], event.touches[1]);
+    lastPinchDistance = initialPinchDistance;
+  }
+});
+
+svg.addEventListener('touchmove', (event) => {
+  if (event.touches.length === 2 && initialPinchDistance !== null) {
+    event.preventDefault();
+    const currentDistance = getTouchDistance(event.touches[0], event.touches[1]);
+    const factor = currentDistance / lastPinchDistance;
+    
+    if (Math.abs(factor - 1) > 0.01) {
+      zoomBy(factor);
+      lastPinchDistance = currentDistance;
+    }
+  }
+});
+
+svg.addEventListener('touchend', (event) => {
+  if (event.touches.length < 2) {
+    initialPinchDistance = null;
+    lastPinchDistance = null;
+  }
+});
+
 // Prevent browser gesture zoom on the SVG
 svg.addEventListener('gesturestart', (event) => event.preventDefault());
 svg.addEventListener('gesturechange', (event) => event.preventDefault());
