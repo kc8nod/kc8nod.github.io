@@ -225,6 +225,8 @@ function drawSlices(ringIndex, endAngles, hue) {
 
 function createLabel(type, value) {
   const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  const contentGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  contentGroup.classList.add('label-content');
 
   if (type === 'fraction') {
     const backgroundCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
@@ -232,34 +234,36 @@ function createLabel(type, value) {
     backgroundCircle.setAttribute('cy', '0');
     backgroundCircle.setAttribute('r', '1.2em');
     backgroundCircle.setAttribute('fill', 'url(#labelGrad)');
-    group.appendChild(backgroundCircle);
+    contentGroup.appendChild(backgroundCircle);
 
     const numText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
     numText.setAttribute('dy', '-0.4em');
     numText.textContent = value.numerator;
-    group.appendChild(numText);
+    contentGroup.appendChild(numText);
 
     const bar = document.createElementNS('http://www.w3.org/2000/svg', 'text');
     bar.textContent = '―';
-    group.appendChild(bar);
+    contentGroup.appendChild(bar);
 
     const denText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
     denText.setAttribute('dy', '0.6em');
     denText.textContent = value.denominator;
-    group.appendChild(denText);
+    contentGroup.appendChild(denText);
 
     group.classList.add('fraction-label');
   } else if (type === 'decimal') {
     const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
     group.classList.add('decimal-label');
     text.textContent = value.toFixed(3);
-    group.appendChild(text);
+    contentGroup.appendChild(text);
   } else if (type === 'mm') {
     const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
     group.classList.add('mm-label');
     text.textContent = value.toFixed(1) + ' ㎜';
-    group.appendChild(text);
+    contentGroup.appendChild(text);
   }
+
+  group.appendChild(contentGroup);
 
   return group;
 }
@@ -305,12 +309,16 @@ function drawLabels(ringIndex, sliceLabels, endAngles, drawLeaders = true, radia
       // Draw label - it's an SVG element
       const clonedLabel = labelText.cloneNode(true);
       clonedLabel.setAttribute('transform', `translate(${labelX}, ${labelY})`);
+      clonedLabel.dataset.tx = `${labelX}`;
+      clonedLabel.dataset.ty = `${labelY}`;
       
       if (radialAngle) {
-        const angle = labelAngle > Math.PI / 2 ? labelAngle + Math.PI : labelAngle;
-        const angleDeg = (angle * 180) / Math.PI;
+        const angleDeg = (labelAngle * 180) / Math.PI;
+        const flipDeg = Math.cos(labelAngle) < 0 ? 180 : 0;
         const existingTransform = clonedLabel.getAttribute('transform');
-        clonedLabel.setAttribute('transform', `${existingTransform} rotate(${angleDeg})`);
+        clonedLabel.setAttribute('transform', `${existingTransform} rotate(${angleDeg + flipDeg})`);
+        clonedLabel.dataset.baseAngle = `${labelAngle}`;
+        clonedLabel.dataset.radial = '1';
       }
       
       group.appendChild(clonedLabel);
@@ -457,6 +465,20 @@ function rotateBy(deltaDeg) {
   rotationDeg = (rotationDeg + deltaDeg) % 360;
   chartGroup.setAttribute('transform', `rotate(${rotationDeg} ${cx} ${cy})`);
   
+  chartGroup.querySelectorAll('.fraction-label .label-content').forEach((label) => {
+    label.setAttribute('transform', `rotate(${-rotationDeg})`);
+  });
+
+  chartGroup.querySelectorAll('[data-radial="1"]').forEach((label) => {
+    const baseAngle = parseFloat(label.dataset.baseAngle || '0');
+    const angle = baseAngle + (rotationDeg * Math.PI) / 180;
+    const flipDeg = Math.cos(angle) < 0 ? 180 : 0;
+    const baseAngleDeg = (baseAngle * 180) / Math.PI;
+    const tx = label.dataset.tx || '0';
+    const ty = label.dataset.ty || '0';
+    label.setAttribute('transform', `translate(${tx}, ${ty}) rotate(${baseAngleDeg + flipDeg})`);
+  });
+
   // Don't update anchorScreenPoint - it stays fixed on screen
   // Only update the SVG point that corresponds to that screen position
   const zoom = panZoom.getZoom();
