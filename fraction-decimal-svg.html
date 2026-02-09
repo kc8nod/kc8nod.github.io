@@ -114,7 +114,7 @@ const cx = width / 2;
 const cy = height / 2;
 
 // Configurable rotation offset for the rings (radians). Change this to rotate the chart.
-const startOffset = -Math.PI / 2;
+const startOffset = 0;
 
 // Rings from 1/2 → 1/32
 const fractionRings = [
@@ -185,14 +185,17 @@ function createArcPath(cx, cy, startAngle, endAngle, innerRadius, outerRadius) {
   const x4 = cx + innerRadius * Math.cos(startAngle);
   const y4 = cy + innerRadius * Math.sin(startAngle);
   
-  const largeArc1 = endAngle - startAngle > Math.PI ? 1 : 0;
-  const largeArc2 = endAngle - startAngle > Math.PI ? 1 : 0;
+  const angleDiff = endAngle - startAngle;
+  const largeArc1 = Math.abs(angleDiff) > Math.PI ? 1 : 0;
+  const largeArc2 = Math.abs(angleDiff) > Math.PI ? 1 : 0;
+  const sweep1 = angleDiff > 0 ? 1 : 0;
+  const sweep2 = angleDiff > 0 ? 0 : 1;
   
   return [
     `M ${x1} ${y1}`,
-    `A ${outerRadius} ${outerRadius} 0 ${largeArc1} 1 ${x2} ${y2}`,
+    `A ${outerRadius} ${outerRadius} 0 ${largeArc1} ${sweep1} ${x2} ${y2}`,
     `L ${x3} ${y3}`,
-    `A ${innerRadius} ${innerRadius} 0 ${largeArc2} 0 ${x4} ${y4}`,
+    `A ${innerRadius} ${innerRadius} 0 ${largeArc2} ${sweep2} ${x4} ${y4}`,
     'Z'
   ].join(' ');
 }
@@ -350,7 +353,7 @@ for (let ringIndex = 0; ringIndex < fractionRings.length; ringIndex++) {
   }
   
   const sliceAngle = (2 * Math.PI) / slices;
-  const endAngles = new Array(slices).fill(0).map((_, idx) => startOffset + (idx + 1) * sliceAngle);
+  const endAngles = new Array(slices).fill(0).map((_, idx) => startOffset - (idx + 1) * sliceAngle);
   const labelAngles = endAngles;
   
   rings.push({ ringIndex, endAngles, sliceLabels, labelAngles, drawLeaders: true, radialAngle: false, hue: 120 });
@@ -360,10 +363,10 @@ for (let ringIndex = 0; ringIndex < fractionRings.length; ringIndex++) {
 {
   const slices = 10;
   const sliceAngle = (2 * Math.PI) / slices;
-  const endAngles = new Array(slices).fill(0).map((_, idx) => startOffset + (idx + 1) * sliceAngle);
+  const endAngles = new Array(slices).fill(0).map((_, idx) => startOffset - (idx + 1) * sliceAngle);
   
   const allDecimals = concatSortedUniquePriority(concatSortedUniquePriority(decimalFractions, decimalMillimeters, 0.002), decimalValues, 0.004);
-  const labelAngles = allDecimals.map(val => startOffset + val * 2 * Math.PI);
+  const labelAngles = allDecimals.map(val => startOffset - val * 2 * Math.PI);
   const sliceLabels = allDecimals.map(val => createLabel('decimal', val));
   
   rings.push({ ringIndex: fractionRings.length, endAngles, sliceLabels, labelAngles, drawLeaders: false, radialAngle: true, hue: 220 });
@@ -372,11 +375,11 @@ for (let ringIndex = 0; ringIndex < fractionRings.length; ringIndex++) {
 // MM ring
 {
   const sliceAngle = (2 * Math.PI) / mmValues.length;
-  const endAngles = mmValues.map(v => startOffset + (v / 25.4) * 2 * Math.PI);
+  const endAngles = mmValues.map(v => startOffset - (v / 25.4) * 2 * Math.PI);
   
   const mmFractions = decimalFractions.map(val => val * 25.4);
   const allMMValues = concatSortedUniquePriority(concatSortedUniquePriority(mmValues, mmFractions, 0.05), decimalValues.map(val => val * 25.4), 0.004 * 25.4);
-  const labelAngles = allMMValues.map(val => startOffset + (val / 25.4) * 2 * Math.PI);
+  const labelAngles = allMMValues.map(val => startOffset - (val / 25.4) * 2 * Math.PI);
   const sliceLabels = allMMValues.map(val => createLabel('mm', val));
   
   rings.push({ ringIndex: fractionRings.length + 1, endAngles, sliceLabels, labelAngles, drawLeaders: false, radialAngle: true, hue: 60 });
@@ -403,7 +406,7 @@ const panZoom = svgPanZoom('#chart', {
   touchEventsEnabled: false,
   preventMouseEventsDefault: true,
   minZoom: 1.0,
-  maxZoom: 20
+  maxZoom: 15
 });
 
 // Now create chartGroup inside svg-pan-zoom's viewport
