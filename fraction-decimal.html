@@ -257,8 +257,8 @@ for (let ringIndex = 0; ringIndex < fractionRings.length; ringIndex++) {
 // MM ring
 {
   const sliceAngle = (2 * Math.PI) / mmValues.length;
-  const endAngles = new Array(mmValues.length).fill(0).map((_, idx) => startOffset + (idx + 1) * sliceAngle);
-  
+  //const endAngles = new Array(mmValues.length).fill(0).map((_, idx) => startOffset + (idx + 1) * sliceAngle);
+  const endAngles = mmValues.map(v => startOffset + (v / 25.4) * 2 * Math.PI);
   // Build mm labels and angles using pre-computed values
   const mmFractions = decimalFractions.map(val => val * 25.4);
   const allMMValues = concatSortedUniquePriority(concatSortedUniquePriority(mmValues, mmFractions, 0.05), decimalValues.map(val => val * 25.4), 0.004 * 25.4);

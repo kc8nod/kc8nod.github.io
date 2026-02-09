@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Nested Fraction Donut Chart - SVG</title>
+<style>
+  body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    background: #f5f5f5;
+    font-family: Arial, sans-serif;
+  }
+  .chart-wrap {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+  svg {
+    display: block;
+  }
+</style>
+</head>
+<body>
+
+<div class="chart-wrap">
+  <svg id="chart" width="1024" height="1024" viewBox="0 0 1024 1024"></svg>
+</div>
+
+<script>
+const svg = document.getElementById("chart");
+const width = 1024;
+const height = 1024;
+const cx = width / 2;
+const cy = height / 2;
+
+// Configurable rotation offset for the rings (radians). Change this to rotate the chart.
+const startOffset = -Math.PI / 2;
+
+// Rings from 1/2 → 1/32
+const fractionRings = [
+  2,  // 1/2
+  4,  // 1/4
+  8,  // 1/8
+  16, // 1/16
+  32, // 1/32
+  64
+];
+
+// SVG parameters
+const outermostRadius = width * 0.45;
+const holeRadius = width * 0.08;
+
+// GCD function
+function gcd(a, b) {
+  while (b !== 0) {
+    [a, b] = [b, a % b];
+  }
+  return a;
+}
+
+// Generate a color palette for a ring
+function getRingColors(slices, ringIndex, hue) {
+  const saturation = 70;
+  const lightnesses = [40, 55, 70, 85];
+  
+  const colors = [];
+  for (let i = 0; i < slices; i++) {
+    const lightness = lightnesses[i % 4];
+    colors.push(`hsl(${hue}, ${saturation}%, ${lightness}%)`);
+  }
+  return colors;
+}
+
+// Concatenate two arrays with priority
+function concatSortedUniquePriority(primary, secondary, tol = 0.002) {
+  const uniqPrimary = Array.from(new Set(primary));
+  uniqPrimary.sort((a, b) => a - b);
+  const result = uniqPrimary.slice();
+
+  for (const s of secondary) {
+    let clash = false;
+    for (const r of result) {
+      if (Math.abs(r - s) < tol) {
+        clash = true;
+        break;
+      }
+    }
+    if (!clash) result.push(s);
+  }
+
+  result.sort((a, b) => a - b);
+  return result;
+}
+
+// Create SVG arc path
+function createArcPath(cx, cy, startAngle, endAngle, innerRadius, outerRadius) {
+  const x1 = cx + outerRadius * Math.cos(startAngle);
+  const y1 = cy + outerRadius * Math.sin(startAngle);
+  const x2 = cx + outerRadius * Math.cos(endAngle);
+  const y2 = cy + outerRadius * Math.sin(endAngle);
+  
+  const x3 = cx + innerRadius * Math.cos(endAngle);
+  const y3 = cy + innerRadius * Math.sin(endAngle);
+  const x4 = cx + innerRadius * Math.cos(startAngle);
+  const y4 = cy + innerRadius * Math.sin(startAngle);
+  
+  const largeArc1 = endAngle - startAngle > Math.PI ? 1 : 0;
+  const largeArc2 = endAngle - startAngle > Math.PI ? 1 : 0;
+  
+  return [
+    `M ${x1} ${y1}`,
+    `A ${outerRadius} ${outerRadius} 0 ${largeArc1} 1 ${x2} ${y2}`,
+    `L ${x3} ${y3}`,
+    `A ${innerRadius} ${innerRadius} 0 ${largeArc2} 0 ${x4} ${y4}`,
+    'Z'
+  ].join(' ');
+}
+
+// Draw slices for a ring
+function drawSlices(ringIndex, endAngles, hue) {
+  const slices = endAngles.length;
+  const innerRadius = ringIndex * ringSpacing + holeRadius;
+  const outerRadius = innerRadius + ringSpacing;
+  const colors = getRingColors(slices, ringIndex, hue);
+  
+  const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  group.setAttribute('class', `ring-slices-${ringIndex}`);
+  
+  for (let i = 1; i <= slices; i++) {
+    const startAngle = (i === 1) ? startOffset : endAngles[i - 2];
+    const endAngle = endAngles[i - 1];
+    
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', createArcPath(cx, cy, startAngle, endAngle, innerRadius, outerRadius));
+    path.setAttribute('fill', colors[i - 1]);
+    path.setAttribute('stroke', 'white');
+    path.setAttribute('stroke-width', '1');
+    
+    group.appendChild(path);
+  }
+  
+  svg.appendChild(group);
+}
+
+// Draw labels for a ring
+function drawLabels(ringIndex, sliceLabels, endAngles, drawLeaders = true, radialAngle = false) {
+  const slices = sliceLabels.length;
+  const innerRadius = ringIndex * ringSpacing + holeRadius;
+  const outerRadius = innerRadius + ringSpacing;
+  
+  const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  group.setAttribute('class', `ring-labels-${ringIndex}`);
+  
+  for (let i = 1; i <= slices; i++) {
+    const endAngle = endAngles[i - 1];
+    const labelText = sliceLabels && sliceLabels[i - 1];
+    
+    if (labelText) {
+      const labelAngle = endAngle;
+      const labelRadius = (innerRadius + outerRadius) / 2;
+      const labelX = cx + labelRadius * Math.cos(labelAngle);
+      const labelY = cy + labelRadius * Math.sin(labelAngle);
+      
+      // Draw leader line if enabled
+      if (drawLeaders) {
+        const lineStartRadius = outerRadius - ringSpacing / 5;
+        const x1 = cx + lineStartRadius * Math.cos(labelAngle);
+        const y1 = cy + lineStartRadius * Math.sin(labelAngle);
+        const x2 = cx + lineEndRadius * Math.cos(labelAngle);
+        const y2 = cy + lineEndRadius * Math.sin(labelAngle);
+        
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('x1', x1);
+        line.setAttribute('y1', y1);
+        line.setAttribute('x2', x2);
+        line.setAttribute('y2', y2);
+        line.setAttribute('stroke', 'rgba(0, 0, 0, 0.6)');
+        line.setAttribute('stroke-width', '1');
+        
+        group.appendChild(line);
+      }
+      
+      // Draw label text
+      const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      text.setAttribute('x', labelX);
+      text.setAttribute('y', labelY);
+      text.setAttribute('text-anchor', 'middle');
+      text.setAttribute('dominant-baseline', 'middle');
+      text.setAttribute('fill', '#000');
+      text.setAttribute('font-size', ringIndex < 2 ? '16px' : '12px');
+      
+      if (radialAngle) {
+        const angle = labelAngle > Math.PI / 2 ? labelAngle + Math.PI : labelAngle;
+        const angleDeg = (angle * 180) / Math.PI;
+        text.setAttribute('transform', `rotate(${angleDeg} ${labelX} ${labelY})`);
+      }
+      
+      text.textContent = labelText;
+      group.appendChild(text);
+    }
+  }
+  
+  svg.appendChild(group);
+}
+
+// Pre-compute common decimal/mm values
+const decimalValues = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0];
+const n = Math.max(...fractionRings);
+const decimalFractions = new Array(n).fill(0).map((_, idx) => (idx + 1) / n);
+const mmValues = new Array(25).fill(0).map((_, idx) => (idx + 1)).concat([25.4]);
+const decimalMillimeters = mmValues.map(val => val / 25.4);
+
+// Build rings array
+const rings = [];
+
+// Fraction rings
+for (let ringIndex = 0; ringIndex < fractionRings.length; ringIndex++) {
+  const slices = fractionRings[ringIndex];
+  
+  const sliceLabels = new Array(slices).fill(null);
+  for (let i = 1; i <= slices; i++) {
+    if (gcd(i, slices) === 1) sliceLabels[i - 1] = `${i}/${slices}`;
+  }
+  
+  const sliceAngle = (2 * Math.PI) / slices;
+  const endAngles = new Array(slices).fill(0).map((_, idx) => startOffset + (idx + 1) * sliceAngle);
+  const labelAngles = endAngles;
+  
+  rings.push({ ringIndex, endAngles, sliceLabels, labelAngles, drawLeaders: true, radialAngle: false, hue: 120 });
+}
+
+// Decimal ring
+{
+  const slices = 10;
+  const sliceAngle = (2 * Math.PI) / slices;
+  const endAngles = new Array(slices).fill(0).map((_, idx) => startOffset + (idx + 1) * sliceAngle);
+  
+  const allDecimals = concatSortedUniquePriority(concatSortedUniquePriority(decimalFractions, decimalMillimeters, 0.002), decimalValues, 0.004);
+  const labelAngles = allDecimals.map(val => startOffset + val * 2 * Math.PI);
+  const sliceLabels = allDecimals.map(val => val.toFixed(3));
+  
+  rings.push({ ringIndex: fractionRings.length, endAngles, sliceLabels, labelAngles, drawLeaders: false, radialAngle: true, hue: 220 });
+}
+
+// MM ring
+{
+  const sliceAngle = (2 * Math.PI) / mmValues.length;
+  const endAngles = mmValues.map(v => startOffset + (v / 25.4) * 2 * Math.PI);
+  
+  const mmFractions = decimalFractions.map(val => val * 25.4);
+  const allMMValues = concatSortedUniquePriority(concatSortedUniquePriority(mmValues, mmFractions, 0.05), decimalValues.map(val => val * 25.4), 0.004 * 25.4);
+  const labelAngles = allMMValues.map(val => startOffset + (val / 25.4) * 2 * Math.PI);
+  const sliceLabels = allMMValues.map(val => val.toFixed(1) + " mm");
+  
+  rings.push({ ringIndex: fractionRings.length + 1, endAngles, sliceLabels, labelAngles, drawLeaders: false, radialAngle: true, hue: 60 });
+}
+
+// Calculate ring spacing
+const totalRings = rings.length;
+const ringSpacing = (outermostRadius - holeRadius) / totalRings;
+const lineEndRadius = outermostRadius - (2 * ringSpacing) + 2;
+
+// Draw all rings
+rings.forEach(ring => {
+  drawSlices(ring.ringIndex, ring.endAngles, ring.hue);
+});
+rings.forEach(ring => {
+  drawLabels(ring.ringIndex, ring.sliceLabels, ring.labelAngles, ring.drawLeaders, ring.radialAngle);
+});
+
+</script>
+
+</body>
+</html>
