@@ -483,27 +483,45 @@ function rotateBy(deltaDeg) {
   };
 }
 
+function getCenterScreen() {
+  const zoom = panZoom.getZoom();
+  const pan = panZoom.getPan();
+  return {
+    x: cx * zoom + pan.x,
+    y: cy * zoom + pan.y
+  };
+}
+
+function zoomByWheelDelta(deltaY) {
+  const factor = Math.exp(-deltaY * 0.01);
+  zoomBy(factor);
+}
+
+function normalizeAngleDelta(deltaRad) {
+  if (deltaRad > Math.PI) return deltaRad - 2 * Math.PI;
+  if (deltaRad < -Math.PI) return deltaRad + 2 * Math.PI;
+  return deltaRad;
+}
+
+function angleFromCenter(point, center) {
+  return Math.atan2(point.y - center.y, point.x - center.x);
+}
+
 // Attach custom zoom button handlers
 document.getElementById('zoomIn').addEventListener('click', () => zoomBy(1.2));
 document.getElementById('zoomOut').addEventListener('click', () => zoomBy(1 / 1.2));
 document.getElementById('zoomReset').addEventListener('click', resetZoom);
 
-// Wheel event handling: ctrl+scroll zooms, scroll alone rotates
 svg.addEventListener('wheel', (event) => {
   event.preventDefault();
-  
   if (event.ctrlKey) {
-    // Pinch zoom on macOS trackpad (or ctrl+wheel)
-    const factor = Math.exp(-event.deltaY * 0.01);
-    zoomBy(factor);
+    zoomByWheelDelta(event.deltaY);
   } else {
-    // Regular scroll rotates
     const deltaDeg = -event.deltaY * 0.5;
     rotateBy(deltaDeg);
   }
 }, { passive: false });
 
-// iPad pinch fallback using touch events
 let lastPinchDistance = null;
 let lastTouchPoint = null;
 
@@ -542,17 +560,10 @@ svg.addEventListener('touchmove', (event) => {
       x: event.touches[0].clientX,
       y: event.touches[0].clientY
     };
-    const zoom = panZoom.getZoom();
-    const pan = panZoom.getPan();
-    const centerScreenX = cx * zoom + pan.x;
-    const centerScreenY = cy * zoom + pan.y;
-
-    const prevAngle = Math.atan2(lastTouchPoint.y - centerScreenY, lastTouchPoint.x - centerScreenX);
-    const currentAngle = Math.atan2(currentPoint.y - centerScreenY, currentPoint.x - centerScreenX);
-    let deltaRad = currentAngle - prevAngle;
-    if (deltaRad > Math.PI) deltaRad -= 2 * Math.PI;
-    if (deltaRad < -Math.PI) deltaRad += 2 * Math.PI;
-
+    const center = getCenterScreen();
+    const prevAngle = angleFromCenter(lastTouchPoint, center);
+    const currentAngle = angleFromCenter(currentPoint, center);
+    const deltaRad = normalizeAngleDelta(currentAngle - prevAngle);
     const deltaDeg = (deltaRad * 180) / Math.PI;
     rotateBy(deltaDeg);
     lastTouchPoint = currentPoint;
