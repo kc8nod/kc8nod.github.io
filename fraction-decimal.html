@@ -65,7 +65,7 @@ const fractionRings = [
 ];
 
 // Canvas parameters
-const totalRings = fractionRings.length + 2;
+const totalRings = fractionRings.length + 2; // fractions + decimal + mm + drill
 const outermostRadius = slicesCanvas.width * 0.45; // leave some margin around the edges
 const holeRadius = slicesCanvas.width * .08;
 const ringSpacing = (outermostRadius - holeRadius) / totalRings; // equal ring widths
@@ -80,9 +80,6 @@ function gcd(a, b) {
   return a;
 }
 
-// Number drill sizes and their decimal equivalents
-const numberDrillName = [80, 79, 78, 77, 76, 75, 74, 73, 72, 71, 70, 69, 68, 67, 66, 65, 64, 63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
-const numberDrillValue = [0.014, 0.015, 0.016, 0.018, 0.020, 0.021, 0.023, 0.024, 0.025, 0.026, 0.028, 0.029, 0.031, 0.032, 0.033, 0.035, 0.036, 0.037, 0.038, 0.039, 0.040, 0.041, 0.042, 0.043, 0.047, 0.052, 0.055, 0.060, 0.064, 0.067, 0.070, 0.073, 0.076, 0.079, 0.081, 0.082, 0.086, 0.089, 0.094, 0.096, 0.098, 0.100, 0.102, 0.104, 0.107, 0.110, 0.111, 0.113, 0.116, 0.120, 0.129, 0.136, 0.141, 0.144, 0.147, 0.150, 0.152, 0.154, 0.157, 0.159, 0.161, 0.166, 0.170, 0.173, 0.177, 0.180, 0.182, 0.185, 0.189, 0.191, 0.194, 0.196, 0.199, 0.201, 0.204, 0.206, 0.209, 0.213, 0.221, 0.228];
 
 // Generate a color palette for a ring using 4 color variations repeated in a pattern.
 // All slices share the same hue based on ringIndex, and saturation is consistent.
