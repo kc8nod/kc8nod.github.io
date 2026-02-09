@@ -4,21 +4,27 @@
 <meta charset="UTF-8">
 <title>Nested Fraction Donut Chart - SVG</title>
 <style>
-  body {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    height: 100vh;
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
     background: #f5f5f5;
     font-family: Arial, sans-serif;
   }
+  body {
+    overflow: hidden;
+  }
   .chart-wrap {
+    width: 100vw;
+    height: 100vh;
     background: white;
-    border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   }
   svg {
     display: block;
+    width: 100%;
+    height: 100%;
+    touch-action: none;
   }
   
   /* Label styles */
@@ -62,6 +68,7 @@
   </svg>
 </div>
 
+<script src="https://unpkg.com/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
 <script>
 const svg = document.getElementById("chart");
 const width = 1024;
@@ -356,6 +363,61 @@ rings.forEach(ring => {
 rings.forEach(ring => {
   drawLabels(ring.ringIndex, ring.sliceLabels, ring.labelAngles, ring.drawLeaders, ring.radialAngle);
 });
+
+// Enable zoom (panning disabled) and lock zoom around the rightmost tangent point
+const anchorSvgPoint = { x: cx + outermostRadius, y: cy };
+let anchorScreenPoint = null;
+
+const panZoom = svgPanZoom('#chart', {
+  zoomEnabled: true,
+  panEnabled: false,
+  controlIconsEnabled: true,
+  fit: false,
+  center: false,
+  mouseWheelZoomEnabled: false,
+  minZoom: 1.0,
+  maxZoom: 20,
+  onZoom: (newZoom) => {
+    if (!anchorScreenPoint) return;
+    panZoom.pan({
+      x: anchorScreenPoint.x - anchorSvgPoint.x * newZoom,
+      y: anchorScreenPoint.y - anchorSvgPoint.y * newZoom
+    });
+  }
+});
+
+// Fit/center explicitly, then capture the fixed screen point after layout
+panZoom.fit();
+panZoom.center();
+
+requestAnimationFrame(() => {
+  const initialZoom = panZoom.getZoom();
+  const initialPan = panZoom.getPan();
+  anchorScreenPoint = {
+    x: anchorSvgPoint.x * initialZoom + initialPan.x,
+    y: anchorSvgPoint.y * initialZoom + initialPan.y
+  };
+});
+
+// Trackpad/mouse wheel zoom support
+svg.addEventListener('wheel', (event) => {
+  event.preventDefault();
+  const currentZoom = panZoom.getZoom();
+  const zoomFactor = 1.0015;
+  const newZoom = currentZoom * Math.pow(zoomFactor, -event.deltaY);
+  const clampedZoom = Math.max(0.5, Math.min(20, newZoom));
+  panZoom.zoom(clampedZoom);
+  if (anchorScreenPoint) {
+    panZoom.pan({
+      x: anchorScreenPoint.x - anchorSvgPoint.x * clampedZoom,
+      y: anchorScreenPoint.y - anchorSvgPoint.y * clampedZoom
+    });
+  }
+}, { passive: false });
+
+// Prevent browser gesture zoom on the SVG
+svg.addEventListener('gesturestart', (event) => event.preventDefault());
+svg.addEventListener('gesturechange', (event) => event.preventDefault());
 
 </script>
 
