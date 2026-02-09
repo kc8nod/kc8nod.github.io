@@ -223,60 +223,44 @@ function drawSlices(ringIndex, endAngles, hue) {
   chartGroup.appendChild(group);
 }
 
-// Create a stacked fraction label element with numerator and denominator
-function createFractionLabel(numerator, denominator) {
+function createLabel(type, value) {
   const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-  
-  const backgroundCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-  backgroundCircle.setAttribute('cx', '0');
-  backgroundCircle.setAttribute('cy', '0');
-  backgroundCircle.setAttribute('r', '1.2em');
-  backgroundCircle.setAttribute('fill', 'url(#labelGrad)');
-  group.appendChild(backgroundCircle);
 
-  // Numerator
-  const numText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-  numText.setAttribute('dy', '-0.4em');
-  numText.textContent = numerator;
-  group.appendChild(numText);
-  
-  // Fraction bar
-  const bar = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-  bar.textContent = '―';
-  group.appendChild(bar);
-  
-  // Denominator
-  const denText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-  denText.setAttribute('dy', '0.6em');
-  denText.textContent = denominator;
-  group.appendChild(denText);
+  if (type === 'fraction') {
+    const backgroundCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    backgroundCircle.setAttribute('cx', '0');
+    backgroundCircle.setAttribute('cy', '0');
+    backgroundCircle.setAttribute('r', '1.2em');
+    backgroundCircle.setAttribute('fill', 'url(#labelGrad)');
+    group.appendChild(backgroundCircle);
 
-  group.classList.add('fraction-label');
-  
-  return group;
-}
+    const numText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    numText.setAttribute('dy', '-0.4em');
+    numText.textContent = value.numerator;
+    group.appendChild(numText);
 
-// Create a decimal label element
-function createDecimalLabel(value) {
-  const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-  
-  const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-  group.classList.add('decimal-label');
-  text.textContent = value.toFixed(3);
-  group.appendChild(text);
-  
-  return group;
-}
+    const bar = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    bar.textContent = '―';
+    group.appendChild(bar);
 
-// Create an MM label element
-function createMMLabel(value) {
-  const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-  
-  const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-  group.classList.add('mm-label');
-  text.textContent = value.toFixed(1) + ' ㎜';
-  group.appendChild(text);
-  
+    const denText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    denText.setAttribute('dy', '0.6em');
+    denText.textContent = value.denominator;
+    group.appendChild(denText);
+
+    group.classList.add('fraction-label');
+  } else if (type === 'decimal') {
+    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    group.classList.add('decimal-label');
+    text.textContent = value.toFixed(3);
+    group.appendChild(text);
+  } else if (type === 'mm') {
+    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    group.classList.add('mm-label');
+    text.textContent = value.toFixed(1) + ' ㎜';
+    group.appendChild(text);
+  }
+
   return group;
 }
 
@@ -352,7 +336,9 @@ for (let ringIndex = 0; ringIndex < fractionRings.length; ringIndex++) {
   
   const sliceLabels = new Array(slices).fill(null);
   for (let i = 1; i <= slices; i++) {
-    if (gcd(i, slices) === 1) sliceLabels[i - 1] = createFractionLabel(i, slices);
+    if (gcd(i, slices) === 1) {
+      sliceLabels[i - 1] = createLabel('fraction', { numerator: i, denominator: slices });
+    }
   }
   
   const sliceAngle = (2 * Math.PI) / slices;
@@ -370,7 +356,7 @@ for (let ringIndex = 0; ringIndex < fractionRings.length; ringIndex++) {
   
   const allDecimals = concatSortedUniquePriority(concatSortedUniquePriority(decimalFractions, decimalMillimeters, 0.002), decimalValues, 0.004);
   const labelAngles = allDecimals.map(val => startOffset + val * 2 * Math.PI);
-  const sliceLabels = allDecimals.map(val => createDecimalLabel(val));
+  const sliceLabels = allDecimals.map(val => createLabel('decimal', val));
   
   rings.push({ ringIndex: fractionRings.length, endAngles, sliceLabels, labelAngles, drawLeaders: false, radialAngle: true, hue: 220 });
 }
@@ -383,7 +369,7 @@ for (let ringIndex = 0; ringIndex < fractionRings.length; ringIndex++) {
   const mmFractions = decimalFractions.map(val => val * 25.4);
   const allMMValues = concatSortedUniquePriority(concatSortedUniquePriority(mmValues, mmFractions, 0.05), decimalValues.map(val => val * 25.4), 0.004 * 25.4);
   const labelAngles = allMMValues.map(val => startOffset + (val / 25.4) * 2 * Math.PI);
-  const sliceLabels = allMMValues.map(val => createMMLabel(val));
+  const sliceLabels = allMMValues.map(val => createLabel('mm', val));
   
   rings.push({ ringIndex: fractionRings.length + 1, endAngles, sliceLabels, labelAngles, drawLeaders: false, radialAngle: true, hue: 60 });
 }
