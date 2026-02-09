@@ -220,7 +220,7 @@ function drawSlices(ringIndex, endAngles, hue) {
     group.appendChild(path);
   }
   
-  svg.appendChild(group);
+  chartGroup.appendChild(group);
 }
 
 // Create a stacked fraction label element with numerator and denominator
@@ -333,7 +333,7 @@ function drawLabels(ringIndex, sliceLabels, endAngles, drawLeaders = true, radia
     }
   }
   
-  svg.appendChild(group);
+  chartGroup.appendChild(group);
 }
 
 // Pre-compute common decimal/mm values
@@ -393,6 +393,31 @@ const totalRings = rings.length;
 const ringSpacing = (outermostRadius - holeRadius) / totalRings;
 const lineEndRadius = outermostRadius - (2 * ringSpacing) + 2;
 
+// Initialize svg-pan-zoom first (it creates its own viewport)
+let anchorSvgPoint = { x: cx + outermostRadius, y: cy };
+let anchorScreenPoint = null;
+let rotationDeg = 0;
+
+const panZoom = svgPanZoom('#chart', {
+  zoomEnabled: false,
+  panEnabled: false,
+  controlIconsEnabled: false,
+  fit: false,
+  center: false,
+  mouseWheelZoomEnabled: false,
+  dblClickZoomEnabled: false,
+  touchEventsEnabled: false,
+  preventMouseEventsDefault: true,
+  minZoom: 1.0,
+  maxZoom: 20
+});
+
+// Now create chartGroup inside svg-pan-zoom's viewport
+const viewport = svg.querySelector('.svg-pan-zoom_viewport');
+const chartGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+chartGroup.setAttribute('id', 'chartGroup');
+viewport.appendChild(chartGroup);
+
 // Draw all rings
 rings.forEach(ring => {
   drawSlices(ring.ringIndex, ring.endAngles, ring.hue);
@@ -400,52 +425,6 @@ rings.forEach(ring => {
 rings.forEach(ring => {
   drawLabels(ring.ringIndex, ring.sliceLabels, ring.labelAngles, ring.drawLeaders, ring.radialAngle);
 });
-
-// Enable zoom (panning disabled) and lock zoom around the rightmost tangent point
-const anchorSvgPoint = { x: cx + outermostRadius, y: cy };
-let anchorScreenPoint = null;
-
-const panZoom = svgPanZoom('#chart', {
-  zoomEnabled: true,
-  panEnabled: false,
-  controlIconsEnabled: false,
-  fit: false,
-  center: false,
-  mouseWheelZoomEnabled: true,
-  dblClickZoomEnabled: false,
-  touchEventsEnabled: false,
-  preventMouseEventsDefault: true,
-  minZoom: 1.0,
-  maxZoom: 20,
-  beforePan: () => {
-    if (!anchorScreenPoint) return false;
-    const zoom = panZoom.getZoom();
-    return {
-      x: anchorScreenPoint.x - anchorSvgPoint.x * zoom,
-      y: anchorScreenPoint.y - anchorSvgPoint.y * zoom
-    };
-  },
-  onZoom: (newZoom) => {
-    if (!anchorScreenPoint) return;
-    const newPan = {
-      x: anchorScreenPoint.x - anchorSvgPoint.x * newZoom,
-      y: anchorScreenPoint.y - anchorSvgPoint.y * newZoom
-    };
-    panZoom.pan(newPan);
-  }
-});
-
-// Fit/center and capture anchor point
-panZoom.fit();
-panZoom.center();
-
-// Initialize anchor point immediately after fit/center
-const initialZoom = panZoom.getZoom();
-const initialPan = panZoom.getPan();
-anchorScreenPoint = {
-  x: anchorSvgPoint.x * initialZoom + initialPan.x,
-  y: anchorSvgPoint.y * initialZoom + initialPan.y
-};
 
 // Custom zoom function that respects anchor point
 function zoomBy(factor) {
@@ -462,16 +441,45 @@ function zoomBy(factor) {
   panZoom.pan(newPan);
 }
 
+function updateAnchorForRotation() {
+  const theta = (rotationDeg * Math.PI) / 180;
+  anchorSvgPoint = {
+    x: cx + outermostRadius * Math.cos(theta),
+    y: cy + outermostRadius * Math.sin(theta)
+  };
+  const zoom = panZoom.getZoom();
+  const pan = panZoom.getPan();
+  anchorScreenPoint = {
+    x: anchorSvgPoint.x * zoom + pan.x,
+    y: anchorSvgPoint.y * zoom + pan.y
+  };
+}
+
 function resetZoom() {
   panZoom.resetZoom();
   panZoom.fit();
   panZoom.center();
+  updateAnchorForRotation();
+}
+
+// Fit/center and capture anchor point
+panZoom.fit();
+panZoom.center();
+updateAnchorForRotation();
+
+function rotateBy(deltaDeg) {
+  rotationDeg = (rotationDeg + deltaDeg) % 360;
+  chartGroup.setAttribute('transform', `rotate(${rotationDeg} ${cx} ${cy})`);
   
-  const currentZoom = panZoom.getZoom();
-  const currentPan = panZoom.getPan();
-  anchorScreenPoint = {
-    x: anchorSvgPoint.x * currentZoom + currentPan.x,
-    y: anchorSvgPoint.y * currentZoom + currentPan.y
+  // Don't update anchorScreenPoint - it stays fixed on screen
+  // Only update the SVG point that corresponds to that screen position
+  const zoom = panZoom.getZoom();
+  const pan = panZoom.getPan();
+  
+  // Calculate which SVG point is currently at the anchor screen position
+  anchorSvgPoint = {
+    x: (anchorScreenPoint.x - pan.x) / zoom,
+    y: (anchorScreenPoint.y - pan.y) / zoom
   };
 }
 
@@ -479,6 +487,21 @@ function resetZoom() {
 document.getElementById('zoomIn').addEventListener('click', () => zoomBy(1.2));
 document.getElementById('zoomOut').addEventListener('click', () => zoomBy(1 / 1.2));
 document.getElementById('zoomReset').addEventListener('click', resetZoom);
+
+// Wheel event handling: ctrl+scroll zooms, scroll alone rotates
+svg.addEventListener('wheel', (event) => {
+  event.preventDefault();
+  
+  if (event.ctrlKey) {
+    // Pinch zoom on macOS trackpad (or ctrl+wheel)
+    const factor = Math.exp(-event.deltaY * 0.01);
+    zoomBy(factor);
+  } else {
+    // Regular scroll rotates
+    const deltaDeg = -event.deltaY * 0.5;
+    rotateBy(deltaDeg);
+  }
+}, { passive: false });
 
 // iPad pinch fallback using touch events
 let lastPinchDistance = null;
