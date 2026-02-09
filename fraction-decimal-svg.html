@@ -498,14 +498,14 @@ svg.addEventListener('wheel', (event) => {
     zoomBy(factor);
   } else {
     // Regular scroll rotates
-    const deltaDeg = event.deltaY * 0.5;
+    const deltaDeg = -event.deltaY * 0.5;
     rotateBy(deltaDeg);
   }
 }, { passive: false });
 
 // iPad pinch fallback using touch events
 let lastPinchDistance = null;
-let lastTouchY = null;
+let lastTouchPoint = null;
 
 function getTouchDistance(t1, t2) {
   const dx = t1.clientX - t2.clientX;
@@ -517,9 +517,12 @@ svg.addEventListener('touchstart', (event) => {
   if (event.touches.length === 2) {
     event.preventDefault();
     lastPinchDistance = getTouchDistance(event.touches[0], event.touches[1]);
-    lastTouchY = null;
+    lastTouchPoint = null;
   } else if (event.touches.length === 1) {
-    lastTouchY = event.touches[0].clientY;
+    lastTouchPoint = {
+      x: event.touches[0].clientX,
+      y: event.touches[0].clientY
+    };
     lastPinchDistance = null;
   }
 }, { passive: false });
@@ -533,13 +536,26 @@ svg.addEventListener('touchmove', (event) => {
       zoomBy(factor);
       lastPinchDistance = currentDistance;
     }
-  } else if (event.touches.length === 1 && lastTouchY !== null) {
+  } else if (event.touches.length === 1 && lastTouchPoint !== null) {
     event.preventDefault();
-    const currentY = event.touches[0].clientY;
-    const deltaY = currentY - lastTouchY;
-    const deltaDeg = deltaY * 0.5;
+    const currentPoint = {
+      x: event.touches[0].clientX,
+      y: event.touches[0].clientY
+    };
+    const zoom = panZoom.getZoom();
+    const pan = panZoom.getPan();
+    const centerScreenX = cx * zoom + pan.x;
+    const centerScreenY = cy * zoom + pan.y;
+
+    const prevAngle = Math.atan2(lastTouchPoint.y - centerScreenY, lastTouchPoint.x - centerScreenX);
+    const currentAngle = Math.atan2(currentPoint.y - centerScreenY, currentPoint.x - centerScreenX);
+    let deltaRad = currentAngle - prevAngle;
+    if (deltaRad > Math.PI) deltaRad -= 2 * Math.PI;
+    if (deltaRad < -Math.PI) deltaRad += 2 * Math.PI;
+
+    const deltaDeg = (deltaRad * 180) / Math.PI;
     rotateBy(deltaDeg);
-    lastTouchY = currentY;
+    lastTouchPoint = currentPoint;
   }
 }, { passive: false });
 
@@ -548,7 +564,7 @@ svg.addEventListener('touchend', (event) => {
     lastPinchDistance = null;
   }
   if (event.touches.length === 0) {
-    lastTouchY = null;
+    lastTouchPoint = null;
   }
 });
 
