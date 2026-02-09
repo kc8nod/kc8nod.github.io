@@ -20,6 +20,28 @@
   svg {
     display: block;
   }
+  
+  /* Label styles */
+  .fraction-label text {
+    font-size: 0.85em;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    fill: #000;
+  }
+  
+  .decimal-label text {
+    font-size: 1em;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    fill: #000;
+  }
+  
+  .mm-label text {
+    font-size: 1em;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    fill: #000;
+  }
 </style>
 </head>
 <body>
@@ -144,6 +166,73 @@ function drawSlices(ringIndex, endAngles, hue) {
   svg.appendChild(group);
 }
 
+// Create a stacked fraction label element with numerator and denominator
+function createFractionLabel(numerator, denominator) {
+  const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  
+  // Numerator
+  const numText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  numText.setAttribute('font-size', '0.85em');
+  numText.setAttribute('text-anchor', 'middle');
+  numText.setAttribute('dominant-baseline', 'middle');
+  numText.setAttribute('fill', '#000');
+  numText.setAttribute('dy', '-0.4em');
+  numText.textContent = numerator;
+  group.appendChild(numText);
+  
+  // Fraction bar
+  const bar = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  bar.setAttribute('font-size', '0.85em');
+  bar.setAttribute('text-anchor', 'middle');
+  bar.setAttribute('dominant-baseline', 'middle');
+  bar.setAttribute('fill', '#000');
+  bar.setAttribute('dy', '0.2em');
+  bar.textContent = '―';
+  group.appendChild(bar);
+  
+  // Denominator
+  const denText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  denText.setAttribute('font-size', '0.85em');
+  denText.setAttribute('text-anchor', 'middle');
+  denText.setAttribute('dominant-baseline', 'middle');
+  denText.setAttribute('fill', '#000');
+  denText.setAttribute('dy', '0.6em');
+  denText.textContent = denominator;
+  group.appendChild(denText);
+  
+  return group;
+}
+
+// Create a decimal label element
+function createDecimalLabel(value) {
+  const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  
+  const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  text.setAttribute('font-size', '1em');
+  text.setAttribute('text-anchor', 'middle');
+  text.setAttribute('dominant-baseline', 'middle');
+  text.setAttribute('fill', '#000');
+  text.textContent = value.toFixed(3);
+  group.appendChild(text);
+  
+  return group;
+}
+
+// Create an MM label element
+function createMMLabel(value) {
+  const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  
+  const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  text.setAttribute('font-size', '1em');
+  text.setAttribute('text-anchor', 'middle');
+  text.setAttribute('dominant-baseline', 'middle');
+  text.setAttribute('fill', '#000');
+  text.textContent = value.toFixed(1) + ' mm';
+  group.appendChild(text);
+  
+  return group;
+}
+
 // Draw labels for a ring
 function drawLabels(ringIndex, sliceLabels, endAngles, drawLeaders = true, radialAngle = false) {
   const slices = sliceLabels.length;
@@ -182,23 +271,18 @@ function drawLabels(ringIndex, sliceLabels, endAngles, drawLeaders = true, radia
         group.appendChild(line);
       }
       
-      // Draw label text
-      const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      text.setAttribute('x', labelX);
-      text.setAttribute('y', labelY);
-      text.setAttribute('text-anchor', 'middle');
-      text.setAttribute('dominant-baseline', 'middle');
-      text.setAttribute('fill', '#000');
-      text.setAttribute('font-size', ringIndex < 2 ? '16px' : '12px');
+      // Draw label - it's an SVG element
+      const clonedLabel = labelText.cloneNode(true);
+      clonedLabel.setAttribute('transform', `translate(${labelX}, ${labelY})`);
       
       if (radialAngle) {
         const angle = labelAngle > Math.PI / 2 ? labelAngle + Math.PI : labelAngle;
         const angleDeg = (angle * 180) / Math.PI;
-        text.setAttribute('transform', `rotate(${angleDeg} ${labelX} ${labelY})`);
+        const existingTransform = clonedLabel.getAttribute('transform');
+        clonedLabel.setAttribute('transform', `${existingTransform} rotate(${angleDeg})`);
       }
       
-      text.textContent = labelText;
-      group.appendChild(text);
+      group.appendChild(clonedLabel);
     }
   }
   
@@ -221,7 +305,7 @@ for (let ringIndex = 0; ringIndex < fractionRings.length; ringIndex++) {
   
   const sliceLabels = new Array(slices).fill(null);
   for (let i = 1; i <= slices; i++) {
-    if (gcd(i, slices) === 1) sliceLabels[i - 1] = `${i}/${slices}`;
+    if (gcd(i, slices) === 1) sliceLabels[i - 1] = createFractionLabel(i, slices);
   }
   
   const sliceAngle = (2 * Math.PI) / slices;
@@ -239,7 +323,7 @@ for (let ringIndex = 0; ringIndex < fractionRings.length; ringIndex++) {
   
   const allDecimals = concatSortedUniquePriority(concatSortedUniquePriority(decimalFractions, decimalMillimeters, 0.002), decimalValues, 0.004);
   const labelAngles = allDecimals.map(val => startOffset + val * 2 * Math.PI);
-  const sliceLabels = allDecimals.map(val => val.toFixed(3));
+  const sliceLabels = allDecimals.map(val => createDecimalLabel(val));
   
   rings.push({ ringIndex: fractionRings.length, endAngles, sliceLabels, labelAngles, drawLeaders: false, radialAngle: true, hue: 220 });
 }
@@ -252,7 +336,7 @@ for (let ringIndex = 0; ringIndex < fractionRings.length; ringIndex++) {
   const mmFractions = decimalFractions.map(val => val * 25.4);
   const allMMValues = concatSortedUniquePriority(concatSortedUniquePriority(mmValues, mmFractions, 0.05), decimalValues.map(val => val * 25.4), 0.004 * 25.4);
   const labelAngles = allMMValues.map(val => startOffset + (val / 25.4) * 2 * Math.PI);
-  const sliceLabels = allMMValues.map(val => val.toFixed(1) + " mm");
+  const sliceLabels = allMMValues.map(val => createMMLabel(val));
   
   rings.push({ ringIndex: fractionRings.length + 1, endAngles, sliceLabels, labelAngles, drawLeaders: false, radialAngle: true, hue: 60 });
 }
