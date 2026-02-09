@@ -30,14 +30,14 @@
   }
   
   .decimal-label text {
-    font-size: 1em;
+    font-size: small;
     text-anchor: middle;
     dominant-baseline: middle;
     fill: #000;
   }
   
   .mm-label text {
-    font-size: 1em;
+    font-size: small;
     text-anchor: middle;
     dominant-baseline: middle;
     fill: #000;
@@ -67,7 +67,8 @@ const fractionRings = [
   8,  // 1/8
   16, // 1/16
   32, // 1/32
-  64
+  64,
+  128
 ];
 
 // SVG parameters
@@ -172,33 +173,22 @@ function createFractionLabel(numerator, denominator) {
   
   // Numerator
   const numText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-  numText.setAttribute('font-size', '0.85em');
-  numText.setAttribute('text-anchor', 'middle');
-  numText.setAttribute('dominant-baseline', 'middle');
-  numText.setAttribute('fill', '#000');
   numText.setAttribute('dy', '-0.4em');
   numText.textContent = numerator;
   group.appendChild(numText);
   
   // Fraction bar
   const bar = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-  bar.setAttribute('font-size', '0.85em');
-  bar.setAttribute('text-anchor', 'middle');
-  bar.setAttribute('dominant-baseline', 'middle');
-  bar.setAttribute('fill', '#000');
-  bar.setAttribute('dy', '0.2em');
   bar.textContent = '―';
   group.appendChild(bar);
   
   // Denominator
   const denText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-  denText.setAttribute('font-size', '0.85em');
-  denText.setAttribute('text-anchor', 'middle');
-  denText.setAttribute('dominant-baseline', 'middle');
-  denText.setAttribute('fill', '#000');
   denText.setAttribute('dy', '0.6em');
   denText.textContent = denominator;
   group.appendChild(denText);
+
+  group.classList.add('fraction-label');
   
   return group;
 }
@@ -208,10 +198,7 @@ function createDecimalLabel(value) {
   const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
   
   const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-  text.setAttribute('font-size', '1em');
-  text.setAttribute('text-anchor', 'middle');
-  text.setAttribute('dominant-baseline', 'middle');
-  text.setAttribute('fill', '#000');
+  group.classList.add('decimal-label');
   text.textContent = value.toFixed(3);
   group.appendChild(text);
   
@@ -223,11 +210,8 @@ function createMMLabel(value) {
   const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
   
   const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-  text.setAttribute('font-size', '1em');
-  text.setAttribute('text-anchor', 'middle');
-  text.setAttribute('dominant-baseline', 'middle');
-  text.setAttribute('fill', '#000');
-  text.textContent = value.toFixed(1) + ' mm';
+  group.classList.add('mm-label');
+  text.textContent = value.toFixed(1) + ' ㎜';
   group.appendChild(text);
   
   return group;
@@ -266,7 +250,7 @@ function drawLabels(ringIndex, sliceLabels, endAngles, drawLeaders = true, radia
         line.setAttribute('x2', x2);
         line.setAttribute('y2', y2);
         line.setAttribute('stroke', 'rgba(0, 0, 0, 0.6)');
-        line.setAttribute('stroke-width', '1');
+        line.setAttribute('stroke-width', '2');
         
         group.appendChild(line);
       }
