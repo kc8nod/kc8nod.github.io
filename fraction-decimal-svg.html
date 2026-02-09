@@ -27,6 +27,38 @@
     touch-action: none;
   }
   
+  .zoom-controls {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    display: flex;
+    gap: 8px;
+    z-index: 100;
+  }
+  
+  .zoom-btn {
+    width: 40px;
+    height: 40px;
+    background: white;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 18px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+  
+  .zoom-btn:hover {
+    background: #f0f0f0;
+  }
+  
+  .zoom-btn:active {
+    background: #e0e0e0;
+  }
+  
   /* Label styles */
   .fraction-label circle{
     fill: url(#labelGrad);
@@ -66,6 +98,11 @@
       </radialGradient>
     </defs>
   </svg>
+  <div class="zoom-controls">
+    <button class="zoom-btn" id="zoomIn" title="Zoom in">+</button>
+    <button class="zoom-btn" id="zoomOut" title="Zoom out">−</button>
+    <button class="zoom-btn" id="zoomReset" title="Reset zoom">⟲</button>
+  </div>
 </div>
 
 <script src="https://unpkg.com/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
@@ -369,51 +406,60 @@ const anchorSvgPoint = { x: cx + outermostRadius, y: cy };
 let anchorScreenPoint = null;
 
 const panZoom = svgPanZoom('#chart', {
-  zoomEnabled: true,
+  zoomEnabled: false,
   panEnabled: false,
-  controlIconsEnabled: true,
+  controlIconsEnabled: false,
   fit: false,
   center: false,
   mouseWheelZoomEnabled: false,
   minZoom: 1.0,
-  maxZoom: 20,
-  onZoom: (newZoom) => {
-    if (!anchorScreenPoint) return;
-    panZoom.pan({
-      x: anchorScreenPoint.x - anchorSvgPoint.x * newZoom,
-      y: anchorScreenPoint.y - anchorSvgPoint.y * newZoom
-    });
-  }
+  maxZoom: 20
 });
 
-// Fit/center explicitly, then capture the fixed screen point after layout
+// Fit/center and capture anchor point
 panZoom.fit();
 panZoom.center();
 
-requestAnimationFrame(() => {
-  const initialZoom = panZoom.getZoom();
-  const initialPan = panZoom.getPan();
-  anchorScreenPoint = {
-    x: anchorSvgPoint.x * initialZoom + initialPan.x,
-    y: anchorSvgPoint.y * initialZoom + initialPan.y
-  };
-});
+// Initialize anchor point immediately after fit/center
+const initialZoom = panZoom.getZoom();
+const initialPan = panZoom.getPan();
+anchorScreenPoint = {
+  x: anchorSvgPoint.x * initialZoom + initialPan.x,
+  y: anchorSvgPoint.y * initialZoom + initialPan.y
+};
 
-// Trackpad/mouse wheel zoom support
-svg.addEventListener('wheel', (event) => {
-  event.preventDefault();
+// Custom zoom function that respects anchor point
+function zoomBy(factor) {
   const currentZoom = panZoom.getZoom();
-  const zoomFactor = 1.0015;
-  const newZoom = currentZoom * Math.pow(zoomFactor, -event.deltaY);
-  const clampedZoom = Math.max(0.5, Math.min(20, newZoom));
-  panZoom.zoom(clampedZoom);
-  if (anchorScreenPoint) {
-    panZoom.pan({
-      x: anchorScreenPoint.x - anchorSvgPoint.x * clampedZoom,
-      y: anchorScreenPoint.y - anchorSvgPoint.y * clampedZoom
-    });
-  }
-}, { passive: false });
+  const newZoom = Math.max(1.0, Math.min(20, currentZoom * factor));
+  
+  // Calculate new pan to keep anchor point fixed on screen
+  const newPan = {
+    x: anchorScreenPoint.x - anchorSvgPoint.x * newZoom,
+    y: anchorScreenPoint.y - anchorSvgPoint.y * newZoom
+  };
+  
+  panZoom.zoomBy(factor, false);
+  panZoom.pan(newPan);
+}
+
+function resetZoom() {
+  panZoom.resetZoom();
+  panZoom.fit();
+  panZoom.center();
+  
+  const currentZoom = panZoom.getZoom();
+  const currentPan = panZoom.getPan();
+  anchorScreenPoint = {
+    x: anchorSvgPoint.x * currentZoom + currentPan.x,
+    y: anchorSvgPoint.y * currentZoom + currentPan.y
+  };
+}
+
+// Attach custom zoom button handlers
+document.getElementById('zoomIn').addEventListener('click', () => zoomBy(1.2));
+document.getElementById('zoomOut').addEventListener('click', () => zoomBy(1 / 1.2));
+document.getElementById('zoomReset').addEventListener('click', resetZoom);
 
 // Prevent browser gesture zoom on the SVG
 svg.addEventListener('gesturestart', (event) => event.preventDefault());
