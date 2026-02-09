@@ -11,22 +11,48 @@
     height: 100vh;
     background: #f5f5f5;
   }
+  .chart-wrap {
+    position: relative;
+    width: 800px;
+    height: 800px;
+  }
   canvas {
-    background: white;
+    position: absolute;
+    top: 0;
+    left: 0;
     border-radius: 8px;
+    width: 800px;
+    height: 800px;
+    background: transparent;
+  }
+  #slices {
+    background: white;
+    z-index: 0;
+  }
+  #labels {
+    z-index: 1;
+    pointer-events: none;
   }
 </style>
 </head>
 <body>
 
-<canvas id="chart" width="800" height="800"></canvas>
+<div class="chart-wrap">
+  <canvas id="slices" width="1024" height="1024"></canvas>
+  <canvas id="labels" width="1024" height="1024"></canvas>
+</div>
 
 <script>
-const canvas = document.getElementById("chart");
-const ctx = canvas.getContext("2d");
+const slicesCanvas = document.getElementById("slices");
+const labelsCanvas = document.getElementById("labels");
+const slicesCtx = slicesCanvas.getContext("2d");
+const labelCtx = labelsCanvas.getContext("2d");
 
-const cx = canvas.width / 2;
-const cy = canvas.height / 2;
+// Match centers to canvas dimensions
+const cx = slicesCanvas.width / 2;
+const cy = slicesCanvas.height / 2;
+// Configurable rotation offset for the rings (radians). Change this to rotate the chart.
+const startOffset = -Math.PI / 2;
 
 // Rings from 1/2 → 1/32
 const fractionRings = [
@@ -34,14 +60,17 @@ const fractionRings = [
   4,  // 1/4
   8,  // 1/8
   16, // 1/16
-  32  // 1/32
+  32,  // 1/32
+  64
 ];
 
 // Canvas parameters
-const totalRings = fractionRings.length + 1;
-const outermostRadius = 350;
-const holeRadius = 100;
+const totalRings = fractionRings.length + 2;
+const outermostRadius = slicesCanvas.width * 0.45; // leave some margin around the edges
+const holeRadius = slicesCanvas.width * .08;
 const ringSpacing = (outermostRadius - holeRadius) / totalRings; // equal ring widths
+const lineEndRadius = outermostRadius - (2 * ringSpacing) + 2;
+
 
 // GCD function
 function gcd(a, b) {
@@ -51,82 +80,196 @@ function gcd(a, b) {
   return a;
 }
 
-// Generate a color palette for a ring (HSL hues evenly spaced)
-function getRingColors(slices) {
+// Number drill sizes and their decimal equivalents
+const numberDrillName = [80, 79, 78, 77, 76, 75, 74, 73, 72, 71, 70, 69, 68, 67, 66, 65, 64, 63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
+const numberDrillValue = [0.014, 0.015, 0.016, 0.018, 0.020, 0.021, 0.023, 0.024, 0.025, 0.026, 0.028, 0.029, 0.031, 0.032, 0.033, 0.035, 0.036, 0.037, 0.038, 0.039, 0.040, 0.041, 0.042, 0.043, 0.047, 0.052, 0.055, 0.060, 0.064, 0.067, 0.070, 0.073, 0.076, 0.079, 0.081, 0.082, 0.086, 0.089, 0.094, 0.096, 0.098, 0.100, 0.102, 0.104, 0.107, 0.110, 0.111, 0.113, 0.116, 0.120, 0.129, 0.136, 0.141, 0.144, 0.147, 0.150, 0.152, 0.154, 0.157, 0.159, 0.161, 0.166, 0.170, 0.173, 0.177, 0.180, 0.182, 0.185, 0.189, 0.191, 0.194, 0.196, 0.199, 0.201, 0.204, 0.206, 0.209, 0.213, 0.221, 0.228];
+
+// Generate a color palette for a ring using 4 color variations repeated in a pattern.
+// All slices share the same hue based on ringIndex, and saturation is consistent.
+// 4 lightness levels cycle through the slices.
+function getRingColors(slices, ringIndex) {
+  const hue = (ringIndex * 60) % 360; // hue based on ring index
+  const saturation = 70; // consistent saturation across rings
+  const lightnesses = [40, 55, 70, 85]; // 4 lightness variations
+  
   const colors = [];
   for (let i = 0; i < slices; i++) {
-    const hue = (i * 360 / slices) % 360; // even spacing
-    colors.push(`hsl(${hue}, 70%, 60%)`);
+    const lightness = lightnesses[i % 4]; // cycle through 4 lightness levels
+    colors.push(`hsl(${hue}, ${saturation}%, ${lightness}%)`);
   }
   return colors;
 }
 
-// Store labels to draw on top of all slices
-const labels = [];
+// Concatenate two arrays of numbers: primary has priority. For each value in
+// `secondary`, it is only added if there is no existing value in the result
+// within `tol`. Returned array is sorted ascending and deduplicated.
+function concatSortedUniquePriority(primary, secondary, tol = 0.002) {
+  const uniqPrimary = Array.from(new Set(primary));
+  uniqPrimary.sort((a, b) => a - b);
+  const result = uniqPrimary.slice();
 
-// Draw all slices first
-fractionRings.forEach((slices, ringIndex) => {
-  const innerRadius = ringIndex * ringSpacing + holeRadius; // add some padding for inner rings
+  for (const s of secondary) {
+    let clash = false;
+    for (const r of result) {
+      if (Math.abs(r - s) < tol) {
+        clash = true;
+        break;
+      }
+    }
+    if (!clash) result.push(s);
+  }
+
+  result.sort((a, b) => a - b);
+  return result;
+}
+
+// Draw slices for a single ring.
+// The start angle for slice i is the end angle of slice i-1, or startOffset for the first slice.
+function drawSlices(ringIndex, endAngles) {
+  const slices = endAngles.length;
+  const innerRadius = ringIndex * ringSpacing + holeRadius;
   const outerRadius = innerRadius + ringSpacing;
-  const sliceAngle = (2 * Math.PI) / slices;
 
-  const colors = getRingColors(slices); // unique colors for each ring
+  // `endAngles` must be provided and have one end angle per slice.
+  if (!Array.isArray(endAngles) || endAngles.length !== slices) {
+    throw new Error(`drawSlices: endAngles must be an array of length ${slices}`);
+  }
+  const ends = endAngles;
+
+  const colors = getRingColors(slices, ringIndex); // colors with hue based on ring
 
   for (let i = 1; i <= slices; i++) {
-    const startAngle = -Math.PI / 2 + (i - 1) * sliceAngle;
-    const endAngle = startAngle + sliceAngle;
+    const startAngle = (i === 1) ? startOffset : ends[i - 2];
+    const endAngle = ends[i - 1];
 
     // Draw slice
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.arc(cx, cy, outerRadius, startAngle, endAngle);
-    ctx.arc(cx, cy, innerRadius, endAngle, startAngle, true);
-    ctx.closePath();
-    ctx.fillStyle = colors[i - 1];
-    ctx.fill();
+    slicesCtx.beginPath();
+    slicesCtx.moveTo(cx, cy);
+    slicesCtx.arc(cx, cy, outerRadius, startAngle, endAngle);
+    slicesCtx.arc(cx, cy, innerRadius, endAngle, startAngle, true);
+    slicesCtx.closePath();
+    slicesCtx.fillStyle = colors[i - 1];
+    slicesCtx.fill();
+  }
+}
 
-    // Store label info for later (include corner angle and outerRadius for leader line)
-    if (gcd(i, slices) === 1) {
-      const angle = startAngle + sliceAngle; // where label will sit (slightly clockwise of center)
+// Draw labels and leaders for a single ring.
+// If radialAngle is true, labels are rotated to match the angle from the center.
+function drawLabels(ringIndex, sliceLabels, endAngles, drawLeaders = true, radialAngle = false) {
+  const slices = sliceLabels.length;
+  const innerRadius = ringIndex * ringSpacing + holeRadius;
+  const outerRadius = innerRadius + ringSpacing;
+
+  // `endAngles` must be provided and have one end angle per slice.
+  if (!Array.isArray(endAngles) || endAngles.length !== slices) {
+    throw new Error(`drawLabels: endAngles must be an array of length ${slices}`);
+  }
+  const ends = endAngles;
+
+  for (let i = 1; i <= slices; i++) {
+    const endAngle = ends[i - 1];
+
+    // If a label was provided for this slice, draw its leader and label now
+    const labelText = sliceLabels && sliceLabels[i - 1];
+    if (labelText) {
+      const labelAngle = endAngle; // place label slightly clockwise of center
       const labelRadius = (innerRadius + outerRadius) / 2;
-      const labelX = cx + labelRadius * Math.cos(angle);
-      const labelY = cy + labelRadius * Math.sin(angle);
-      labels.push({
-        text: `${i}/${slices}`,
-        x: labelX,
-        y: labelY,
-        ringIndex: ringIndex,
-        cornerAngle: angle,
-        outerRadius: outerRadius
-      });
+      const labelX = cx + labelRadius * Math.cos(labelAngle);
+      const labelY = cy + labelRadius * Math.sin(labelAngle);
+
+      // Draw leader line if enabled
+      if (drawLeaders) {
+        const lineStartRadius = (outerRadius - ringSpacing / 5);
+        const x1 = cx + lineStartRadius * Math.cos(labelAngle);
+        const y1 = cy + lineStartRadius * Math.sin(labelAngle);
+        const x2 = cx + lineEndRadius * Math.cos(labelAngle);
+        const y2 = cy + lineEndRadius * Math.sin(labelAngle);
+
+        labelCtx.strokeStyle = "rgba(0,0,0,0.6)";
+        labelCtx.lineWidth = 1;
+        labelCtx.beginPath();
+        labelCtx.moveTo(x1, y1);
+        labelCtx.lineTo(x2, y2);
+        labelCtx.stroke();
+      }
+
+      // Draw label text on top
+      labelCtx.fillStyle = "#000";
+      labelCtx.font = ringIndex < 2 ? "16px Arial" : "12px Arial";
+      labelCtx.textAlign = "center";
+      labelCtx.textBaseline = "middle";
+      
+      if (radialAngle) {
+        // Rotate text to match the radial angle
+        labelCtx.save();
+        labelCtx.translate(labelX, labelY);
+        labelCtx.rotate(labelAngle > Math.PI / 2 ? labelAngle + Math.PI : labelAngle); 
+        labelCtx.fillText(labelText, 0, 0);
+        labelCtx.restore();
+      } else {
+        labelCtx.fillText(labelText, labelX, labelY);
+      }
     }
   }
-});
+}
 
-// Draw leader lines from each labeled slice's outer, most-clockwise corner
-labels.forEach(label => {
-  const lineStartRadius = (label.outerRadius - ringSpacing/5);
-  const lineEndRadius = outermostRadius + 5; // extend a bit beyond the slice
-  const x1 = cx + lineStartRadius * Math.cos(label.cornerAngle);
-  const y1 = cy + lineStartRadius * Math.sin(label.cornerAngle);
-  const x2 = cx + lineEndRadius * Math.cos(label.cornerAngle);
-  const y2 = cy + lineEndRadius * Math.sin(label.cornerAngle);
-  ctx.strokeStyle = "rgba(0,0,0,0.6)";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(x1, y1);
-  ctx.lineTo(x2, y2);
-  ctx.stroke();
-});
+// Note: slices and labels are drawn separately by drawSlices() and drawLabels()
 
-// Draw all labels on top
-labels.forEach(label => {
-  ctx.fillStyle = "#000";
-  ctx.font = label.ringIndex < 2 ? "16px Arial" : "12px Arial";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(label.text, label.x, label.y);
-});
+// Build labels and end angles, then draw all rings in a single iteration
+for (let ringIndex = 0; ringIndex < fractionRings.length; ringIndex++) {
+  const slices = fractionRings[ringIndex];
+
+  // Build label array for this ring
+  const sliceLabels = new Array(slices).fill(null);
+  for (let i = 1; i <= slices; i++) {
+    if (gcd(i, slices) === 1) sliceLabels[i - 1] = `${i}/${slices}`; // default label for irreducible fractions
+  }
+
+  // Build end angles for this ring
+  const sliceAngle = (2 * Math.PI) / slices;
+  const endAngles = new Array(slices).fill(0).map((_, idx) => startOffset + (idx + 1) * sliceAngle);
+
+  // Draw the slices and labels
+  drawSlices(ringIndex, endAngles);
+  drawLabels(ringIndex, sliceLabels, endAngles);
+}
+
+// draw the decimal ring
+const decimalSliceAngle = (2 * Math.PI) / 10;
+const decimalEndAngles = new Array(10).fill(0).map((_, idx) => startOffset + (idx + 1) * decimalSliceAngle);
+drawSlices(fractionRings.length, decimalEndAngles);
+
+const mmValues = new Array(25).fill(0).map((_, idx) => (idx + 1)).concat([25.4]);
+const mmSliceAngles = mmValues.map(val => startOffset + (val / 25.4) * 2 * Math.PI);
+drawSlices(fractionRings.length + 1, mmSliceAngles);
+
+// Decimal values from 0.1 to 1.0
+const decimalValues = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0];
+
+// smallest fractions as decimals 
+const n = Math.max(...fractionRings);
+const decimalFractions = new Array(n).fill(0).map((_, idx) => (idx + 1) / n);
+const decimalMillimeters = mmValues.map(val =>  val / 25.4); // convert mm to decimal inches, rounded to 3 decimals
+
+// Build all decimal values with priority: decimalValues+decimalFractions have priority
+// over decimalMillimeters. Values in secondary within 0.002 of any primary
+// value are omitted. Use helper to perform this.
+const allDecimals = concatSortedUniquePriority(concatSortedUniquePriority(decimalFractions, decimalMillimeters, 0.002),
+                            decimalValues, 0.004);
+const decimalLabelAngles = allDecimals.map(val => startOffset + val * 2 * Math.PI);
+
+const mmFractions = decimalFractions.map(val => val * 25.4); // convert decimal fractions to mm, rounded to 1 decimal
+const allMMValues = concatSortedUniquePriority(concatSortedUniquePriority(mmValues, mmFractions, 0.05),
+                            decimalValues.map(val => val * 25.4), 0.004 * 25.4);
+const mmLabelAngles = allMMValues.map(val => startOffset + val/25.4 * 2 * Math.PI);
+
+// values formatted as strings with 3 decimal places
+const decimalStrings = allDecimals.map(val => val.toFixed(3));
+const mmStrings = allMMValues.map(val => val.toFixed(1) + " ㎜");
+
+drawLabels(fractionRings.length, decimalStrings, decimalLabelAngles, false, true);
+drawLabels(fractionRings.length + 1, mmStrings, mmLabelAngles, false, true);
+
 </script>
 
 </body>
