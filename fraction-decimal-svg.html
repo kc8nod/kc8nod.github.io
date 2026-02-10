@@ -350,11 +350,9 @@ const ringSpacing = (outermostRadius - holeRadius) / totalRings;
 const lineEndRadius = outermostRadius - (2 * ringSpacing) + 2;
 
 // Initialize svg-pan-zoom first (it creates its own viewport)
-const MAX_LABEL_SCALE = 2.0;
 let anchorSvgPoint = { x: cx + outermostRadius, y: cy };
 let anchorScreenPoint = null;
 let rotationDeg = 0;
-let labelScale = 1;
 
 const panZoom = svgPanZoom('#chart', {
   zoomEnabled: false,
@@ -397,19 +395,6 @@ function zoomBy(factor) {
   
   panZoom.zoomBy(factor, false);
   panZoom.pan(newPan);
-  updateLabelScale(newZoom);
-}
-
-function updateLabelScale(zoom) {
-  labelScale = zoom > MAX_LABEL_SCALE ? MAX_LABEL_SCALE / zoom : 1;
-
-  chartGroup.querySelectorAll('.fraction-label .label-content').forEach((label) => {
-    label.setAttribute('transform', `rotate(${-rotationDeg}) scale(${labelScale})`);
-  });
-
-  chartGroup.querySelectorAll('.decimal-label .label-content, .mm-label .label-content').forEach((label) => {
-    label.setAttribute('transform', `scale(${labelScale})`);
-  });
 }
 
 function updateAnchorForRotation() {
@@ -431,7 +416,6 @@ function resetZoom() {
   panZoom.fit();
   panZoom.center();
   updateAnchorForRotation();
-  updateLabelScale(panZoom.getZoom());
 }
 
 // Fit/center and capture anchor point
@@ -444,7 +428,7 @@ function rotateBy(deltaDeg) {
   chartGroup.setAttribute('transform', `rotate(${rotationDeg} ${cx} ${cy})`);
   
   chartGroup.querySelectorAll('.fraction-label .label-content').forEach((label) => {
-    label.setAttribute('transform', `rotate(${-rotationDeg}) scale(${labelScale})`);
+    label.setAttribute('transform', `rotate(${-rotationDeg})`);
   });
 
   chartGroup.querySelectorAll('[data-radial="1"]').forEach((label) => {
@@ -469,20 +453,6 @@ function rotateBy(deltaDeg) {
   };
 }
 
-function getCenterScreen() {
-  const zoom = panZoom.getZoom();
-  const pan = panZoom.getPan();
-  return {
-    x: cx * zoom + pan.x,
-    y: cy * zoom + pan.y
-  };
-}
-
-function zoomByWheelDelta(deltaY) {
-  const factor = Math.exp(-deltaY * 0.01);
-  zoomBy(factor);
-}
-
 function normalizeAngleDelta(deltaRad) {
   if (deltaRad > Math.PI) return deltaRad - 2 * Math.PI;
   if (deltaRad < -Math.PI) return deltaRad + 2 * Math.PI;
@@ -495,53 +465,32 @@ function angleFromCenter(point, center) {
 
 svg.addEventListener('wheel', (event) => {
   event.preventDefault();
-  if (event.ctrlKey) {
-    zoomByWheelDelta(event.deltaY);
-  } else {
-    const deltaDeg = -event.deltaY * 0.5;
-    rotateBy(deltaDeg);
-  }
+  const deltaDeg = -event.deltaY * 0.5;
+  rotateBy(deltaDeg);
 }, { passive: false });
 
-let lastPinchDistance = null;
 let lastTouchPoint = null;
 
-function getTouchDistance(t1, t2) {
-  const dx = t1.clientX - t2.clientX;
-  const dy = t1.clientY - t2.clientY;
-  return Math.sqrt(dx * dx + dy * dy);
-}
-
 svg.addEventListener('touchstart', (event) => {
-  if (event.touches.length === 2) {
-    event.preventDefault();
-    lastPinchDistance = getTouchDistance(event.touches[0], event.touches[1]);
-    lastTouchPoint = null;
-  } else if (event.touches.length === 1) {
+  if (event.touches.length === 1) {
     lastTouchPoint = {
       x: event.touches[0].clientX,
       y: event.touches[0].clientY
     };
-    lastPinchDistance = null;
   }
 }, { passive: false });
 
 svg.addEventListener('touchmove', (event) => {
-  if (event.touches.length === 2 && lastPinchDistance !== null) {
-    event.preventDefault();
-    const currentDistance = getTouchDistance(event.touches[0], event.touches[1]);
-    const factor = currentDistance / lastPinchDistance;
-    if (Math.abs(factor - 1) > 0.01) {
-      zoomBy(factor);
-      lastPinchDistance = currentDistance;
-    }
-  } else if (event.touches.length === 1 && lastTouchPoint !== null) {
+  if (event.touches.length === 1 && lastTouchPoint !== null) {
     event.preventDefault();
     const currentPoint = {
       x: event.touches[0].clientX,
       y: event.touches[0].clientY
     };
-    const center = getCenterScreen();
+    const center = {
+      x: cx,
+      y: cy
+    };
     const prevAngle = angleFromCenter(lastTouchPoint, center);
     const currentAngle = angleFromCenter(currentPoint, center);
     const deltaRad = normalizeAngleDelta(currentAngle - prevAngle);
@@ -552,9 +501,6 @@ svg.addEventListener('touchmove', (event) => {
 }, { passive: false });
 
 svg.addEventListener('touchend', (event) => {
-  if (event.touches.length < 2) {
-    lastPinchDistance = null;
-  }
   if (event.touches.length === 0) {
     lastTouchPoint = null;
   }
