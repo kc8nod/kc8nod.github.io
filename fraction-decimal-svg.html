@@ -463,17 +463,22 @@ function angleFromCenter(point, center) {
   return Math.atan2(point.y - center.y, point.x - center.x);
 }
 
+function applyZoom(cxDelta) {
+  cx = Math.min(cx + cxDelta, width / 2);
+  if (cx < 0) {
+    holeRadius = holeRadius - cxDelta;
+  }
+  outermostRadius = (width - cx) * 0.95;
+  ringSpacing = (outermostRadius - holeRadius) / totalRings;
+  lineEndRadius = outermostRadius - (2 * ringSpacing) + 2;
+  redrawChart();
+}
+
 svg.addEventListener('wheel', (event) => {
   event.preventDefault();
   if (event.ctrlKey) {
     const cxDelta = event.deltaY * 1.0;
-    cx = Math.min(cx + cxDelta, width / 2);
-    //holeRadius = Math.max(holeRadius - cxDelta, 10);
-    if( cx < 0) {holeRadius = holeRadius - cxDelta;}
-    outermostRadius = (width - cx) * 0.95;
-    ringSpacing = (outermostRadius - holeRadius) / totalRings;
-    lineEndRadius = outermostRadius - (2 * ringSpacing) + 2;
-    redrawChart();
+    applyZoom(cxDelta);
   } else {
     const deltaDeg = -event.deltaY * 0.5;
     rotateBy(deltaDeg);
@@ -481,6 +486,7 @@ svg.addEventListener('wheel', (event) => {
 }, { passive: false });
 
 let lastTouchPoint = null;
+let lastPinchDistance = null;
 
 svg.addEventListener('touchstart', (event) => {
   if (event.touches.length === 1) {
@@ -488,11 +494,29 @@ svg.addEventListener('touchstart', (event) => {
       x: event.touches[0].clientX,
       y: event.touches[0].clientY
     };
+    lastPinchDistance = null;
+  } else if (event.touches.length === 2) {
+    lastTouchPoint = null;
+    lastPinchDistance = Math.hypot(
+      event.touches[1].clientX - event.touches[0].clientX,
+      event.touches[1].clientY - event.touches[0].clientY
+    );
   }
 }, { passive: false });
 
 svg.addEventListener('touchmove', (event) => {
-  if (event.touches.length === 1 && lastTouchPoint !== null) {
+  if (event.touches.length === 2) {
+    event.preventDefault();
+    const currentDistance = Math.hypot(
+      event.touches[1].clientX - event.touches[0].clientX,
+      event.touches[1].clientY - event.touches[0].clientY
+    );
+    if (lastPinchDistance !== null) {
+      const cxDelta = (lastPinchDistance - currentDistance) * 0.5;
+      applyZoom(cxDelta);
+    }
+    lastPinchDistance = currentDistance;
+  } else if (event.touches.length === 1 && lastTouchPoint !== null) {
     event.preventDefault();
     const currentPoint = {
       x: event.touches[0].clientX,
@@ -514,6 +538,13 @@ svg.addEventListener('touchmove', (event) => {
 svg.addEventListener('touchend', (event) => {
   if (event.touches.length === 0) {
     lastTouchPoint = null;
+    lastPinchDistance = null;
+  } else if (event.touches.length === 1) {
+    lastPinchDistance = null;
+    lastTouchPoint = {
+      x: event.touches[0].clientX,
+      y: event.touches[0].clientY
+    };
   }
 });
 
