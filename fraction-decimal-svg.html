@@ -350,9 +350,11 @@ const ringSpacing = (outermostRadius - holeRadius) / totalRings;
 const lineEndRadius = outermostRadius - (2 * ringSpacing) + 2;
 
 // Initialize svg-pan-zoom first (it creates its own viewport)
+const MAX_LABEL_SCALE = 2.0;
 let anchorSvgPoint = { x: cx + outermostRadius, y: cy };
 let anchorScreenPoint = null;
 let rotationDeg = 0;
+let labelScale = 1;
 
 const panZoom = svgPanZoom('#chart', {
   zoomEnabled: false,
@@ -395,6 +397,19 @@ function zoomBy(factor) {
   
   panZoom.zoomBy(factor, false);
   panZoom.pan(newPan);
+  updateLabelScale(newZoom);
+}
+
+function updateLabelScale(zoom) {
+  labelScale = zoom > MAX_LABEL_SCALE ? MAX_LABEL_SCALE / zoom : 1;
+
+  chartGroup.querySelectorAll('.fraction-label .label-content').forEach((label) => {
+    label.setAttribute('transform', `rotate(${-rotationDeg}) scale(${labelScale})`);
+  });
+
+  chartGroup.querySelectorAll('.decimal-label .label-content, .mm-label .label-content').forEach((label) => {
+    label.setAttribute('transform', `scale(${labelScale})`);
+  });
 }
 
 function updateAnchorForRotation() {
@@ -416,6 +431,7 @@ function resetZoom() {
   panZoom.fit();
   panZoom.center();
   updateAnchorForRotation();
+  updateLabelScale(panZoom.getZoom());
 }
 
 // Fit/center and capture anchor point
@@ -428,7 +444,7 @@ function rotateBy(deltaDeg) {
   chartGroup.setAttribute('transform', `rotate(${rotationDeg} ${cx} ${cy})`);
   
   chartGroup.querySelectorAll('.fraction-label .label-content').forEach((label) => {
-    label.setAttribute('transform', `rotate(${-rotationDeg})`);
+    label.setAttribute('transform', `rotate(${-rotationDeg}) scale(${labelScale})`);
   });
 
   chartGroup.querySelectorAll('[data-radial="1"]').forEach((label) => {
