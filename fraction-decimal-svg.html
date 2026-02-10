@@ -70,16 +70,16 @@ const svg = document.getElementById("chart");
 const chartWrap = document.querySelector(".chart-wrap");
 
 // Calculate dimensions from enclosing element
-const width = document.body.clientWidth;
-const height = Math.min(document.body.clientHeight, document.body.clientWidth * 1.2);
+let width = document.body.clientWidth;
+let height = Math.min(document.body.clientHeight, document.body.clientWidth * 1.2);
 
 // Set SVG viewBox and dimensions to fill the window
 svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
 svg.setAttribute("width", width);
 svg.setAttribute("height", height);
 
-const cx = width / 8;
-const cy = height / 2;
+let cx = width / 8;
+let cy = height / 2;
 
 // Configurable rotation offset for the rings (radians). Change this to rotate the chart.
 const startOffset = 0;
@@ -95,8 +95,8 @@ const fractionRings = [
 ];
 
 // SVG parameters
-const outermostRadius = (width-cx) * .95;
-const holeRadius = width * 0.05;
+let outermostRadius = (width-cx) * .95;
+let holeRadius = width * 0.05;
 
 // GCD function
 function gcd(a, b) {
@@ -346,8 +346,12 @@ for (let ringIndex = 0; ringIndex < fractionRings.length; ringIndex++) {
 
 // Calculate ring spacing
 const totalRings = rings.length;
-const ringSpacing = (outermostRadius - holeRadius) / totalRings;
-const lineEndRadius = outermostRadius - (2 * ringSpacing) + 2;
+let ringSpacing = (outermostRadius - holeRadius) / totalRings;
+let lineEndRadius = outermostRadius - (2 * ringSpacing) + 2;
+
+// Track zoom level for linear cx movement
+let zoomLevel = 1;
+const initialCx = cx;
 
 // Initialize svg-pan-zoom first (it creates its own viewport)
 let anchorSvgPoint = { x: cx + outermostRadius, y: cy };
@@ -382,19 +386,15 @@ rings.forEach(ring => {
   drawLabels(ring.ringIndex, ring.sliceLabels, ring.labelAngles, ring.drawLeaders, ring.radialAngle);
 });
 
-// Custom zoom function that respects anchor point
-function zoomBy(factor) {
-  const currentZoom = panZoom.getZoom();
-  const newZoom = Math.max(1.0, Math.min(20, currentZoom * factor));
-  
-  // Calculate new pan to keep anchor point fixed on screen
-  const newPan = {
-    x: anchorScreenPoint.x - anchorSvgPoint.x * newZoom,
-    y: anchorScreenPoint.y - anchorSvgPoint.y * newZoom
-  };
-  
-  panZoom.zoomBy(factor, false);
-  panZoom.pan(newPan);
+function redrawChart() {
+  chartGroup.innerHTML = '';
+  rings.forEach(ring => {
+    drawSlices(ring.ringIndex, ring.endAngles, ring.hue);
+  });
+  rings.forEach(ring => {
+    drawLabels(ring.ringIndex, ring.sliceLabels, ring.labelAngles, ring.drawLeaders, ring.radialAngle);
+  });
+  chartGroup.setAttribute('transform', `rotate(${rotationDeg} ${cx} ${cy})`);
 }
 
 function updateAnchorForRotation() {
@@ -465,8 +465,19 @@ function angleFromCenter(point, center) {
 
 svg.addEventListener('wheel', (event) => {
   event.preventDefault();
-  const deltaDeg = -event.deltaY * 0.5;
-  rotateBy(deltaDeg);
+  if (event.ctrlKey) {
+    const cxDelta = event.deltaY * 1.0;
+    cx = Math.min(cx + cxDelta, width / 2);
+    //holeRadius = Math.max(holeRadius - cxDelta, 10);
+    if( cx < 0) {holeRadius = holeRadius - cxDelta;}
+    outermostRadius = (width - cx) * 0.95;
+    ringSpacing = (outermostRadius - holeRadius) / totalRings;
+    lineEndRadius = outermostRadius - (2 * ringSpacing) + 2;
+    redrawChart();
+  } else {
+    const deltaDeg = -event.deltaY * 0.5;
+    rotateBy(deltaDeg);
+  }
 }, { passive: false });
 
 let lastTouchPoint = null;
