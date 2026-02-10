@@ -496,6 +496,7 @@ svg.addEventListener('touchstart', (event) => {
     };
     lastPinchDistance = null;
   } else if (event.touches.length === 2) {
+    event.preventDefault();
     lastTouchPoint = null;
     lastPinchDistance = Math.hypot(
       event.touches[1].clientX - event.touches[0].clientX,
