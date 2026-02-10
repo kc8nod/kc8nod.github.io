@@ -2,6 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Nested Fraction Donut Chart - SVG</title>
 <style>
   html, body {
@@ -27,37 +28,6 @@
     touch-action: none;
   }
   
-  .zoom-controls {
-    position: fixed;
-    top: 10px;
-    right: 10px;
-    display: flex;
-    gap: 8px;
-    z-index: 100;
-  }
-  
-  .zoom-btn {
-    width: 40px;
-    height: 40px;
-    background: white;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 18px;
-    font-weight: bold;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  }
-  
-  .zoom-btn:hover {
-    background: #f0f0f0;
-  }
-  
-  .zoom-btn:active {
-    background: #e0e0e0;
-  }
   
   /* Label styles */
   .fraction-label circle{
@@ -65,19 +35,13 @@
   }
 
   .fraction-label text {
-    font-size: 0.85em;
+    font-size: medium;
     text-anchor: middle;
     dominant-baseline: middle;
     fill: #000;
   }
   
-  .decimal-label text {
-    font-size: small;
-    text-anchor: middle;
-    dominant-baseline: middle;
-    fill: #000;
-  }
-  
+  .decimal-label text,
   .mm-label text {
     font-size: small;
     text-anchor: middle;
@@ -98,38 +62,41 @@
       </radialGradient>
     </defs>
   </svg>
-  <div class="zoom-controls">
-    <button class="zoom-btn" id="zoomIn" title="Zoom in">+</button>
-    <button class="zoom-btn" id="zoomOut" title="Zoom out">−</button>
-    <button class="zoom-btn" id="zoomReset" title="Reset zoom">⟲</button>
-  </div>
 </div>
 
 <script src="https://unpkg.com/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
 <script>
 const svg = document.getElementById("chart");
-const width = 1024;
-const height = 1024;
-const cx = width / 2;
+const chartWrap = document.querySelector(".chart-wrap");
+
+// Calculate dimensions from enclosing element
+const width = document.body.clientWidth;
+const height = Math.min(document.body.clientHeight, document.body.clientWidth * 1.2);
+
+// Set SVG viewBox and dimensions to fill the window
+svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+svg.setAttribute("width", width);
+svg.setAttribute("height", height);
+
+const cx = width / 8;
 const cy = height / 2;
 
 // Configurable rotation offset for the rings (radians). Change this to rotate the chart.
 const startOffset = 0;
 
-// Rings from 1/2 → 1/32
+// Rings from 1/2 → 1/64
 const fractionRings = [
   2,  // 1/2
   4,  // 1/4
   8,  // 1/8
   16, // 1/16
   32, // 1/32
-  64,
-  128
+  64  // 1/64
 ];
 
 // SVG parameters
-const outermostRadius = width * 0.45;
-const holeRadius = width * 0.06;
+const outermostRadius = (width-cx) * .95;
+const holeRadius = width * 0.05;
 
 // GCD function
 function gcd(a, b) {
@@ -139,10 +106,15 @@ function gcd(a, b) {
   return a;
 }
 
+// Helper to create SVG elements
+function createSVGElement(tagName) {
+  return document.createElementNS('http://www.w3.org/2000/svg', tagName);
+}
+
 // Generate a color palette for a ring
 function getRingColors(slices, ringIndex, hue) {
   const saturation = 70;
-  const lightnesses = [40, 55, 70, 85];
+  const lightnesses = [35, 55, 45, 65];
   
   const colors = [];
   for (let i = 0; i < slices; i++) {
@@ -186,16 +158,15 @@ function createArcPath(cx, cy, startAngle, endAngle, innerRadius, outerRadius) {
   const y4 = cy + innerRadius * Math.sin(startAngle);
   
   const angleDiff = endAngle - startAngle;
-  const largeArc1 = Math.abs(angleDiff) > Math.PI ? 1 : 0;
-  const largeArc2 = Math.abs(angleDiff) > Math.PI ? 1 : 0;
+  const largeArc = Math.abs(angleDiff) > Math.PI ? 1 : 0;
   const sweep1 = angleDiff > 0 ? 1 : 0;
   const sweep2 = angleDiff > 0 ? 0 : 1;
   
   return [
     `M ${x1} ${y1}`,
-    `A ${outerRadius} ${outerRadius} 0 ${largeArc1} ${sweep1} ${x2} ${y2}`,
+    `A ${outerRadius} ${outerRadius} 0 ${largeArc} ${sweep1} ${x2} ${y2}`,
     `L ${x3} ${y3}`,
-    `A ${innerRadius} ${innerRadius} 0 ${largeArc2} ${sweep2} ${x4} ${y4}`,
+    `A ${innerRadius} ${innerRadius} 0 ${largeArc} ${sweep2} ${x4} ${y4}`,
     'Z'
   ].join(' ');
 }
@@ -207,14 +178,14 @@ function drawSlices(ringIndex, endAngles, hue) {
   const outerRadius = innerRadius + ringSpacing;
   const colors = getRingColors(slices, ringIndex, hue);
   
-  const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  const group = createSVGElement('g');
   group.setAttribute('class', `ring-slices-${ringIndex}`);
   
   for (let i = 1; i <= slices; i++) {
     const startAngle = (i === 1) ? startOffset : endAngles[i - 2];
     const endAngle = endAngles[i - 1];
     
-    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    const path = createSVGElement('path');
     path.setAttribute('d', createArcPath(cx, cy, startAngle, endAngle, innerRadius, outerRadius));
     path.setAttribute('fill', colors[i - 1]);
     path.setAttribute('stroke', 'white');
@@ -227,47 +198,41 @@ function drawSlices(ringIndex, endAngles, hue) {
 }
 
 function createLabel(type, value) {
-  const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-  const contentGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  const group = createSVGElement('g');
+  const contentGroup = createSVGElement('g');
   contentGroup.classList.add('label-content');
 
   if (type === 'fraction') {
-    const backgroundCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-    backgroundCircle.setAttribute('cx', '0');
-    backgroundCircle.setAttribute('cy', '0');
-    backgroundCircle.setAttribute('r', '1.2em');
-    backgroundCircle.setAttribute('fill', 'url(#labelGrad)');
-    contentGroup.appendChild(backgroundCircle);
+    group.classList.add('fraction-label');
+    
+    const circle = createSVGElement('circle');
+    circle.setAttribute('cx', '0');
+    circle.setAttribute('cy', '0');
+    circle.setAttribute('r', '1.2em');
+    circle.setAttribute('fill', 'url(#labelGrad)');
+    contentGroup.appendChild(circle);
 
-    const numText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-    numText.setAttribute('dy', '-0.4em');
+    const numText = createSVGElement('text');
+    numText.setAttribute('dy', '-0.5em');
     numText.textContent = value.numerator;
     contentGroup.appendChild(numText);
 
-    const bar = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    const bar = createSVGElement('text');
     bar.textContent = '―';
     contentGroup.appendChild(bar);
 
-    const denText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-    denText.setAttribute('dy', '0.6em');
+    const denText = createSVGElement('text');
+    denText.setAttribute('dy', '0.5em');
     denText.textContent = value.denominator;
     contentGroup.appendChild(denText);
-
-    group.classList.add('fraction-label');
-  } else if (type === 'decimal') {
-    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-    group.classList.add('decimal-label');
-    text.textContent = value.toFixed(3);
-    contentGroup.appendChild(text);
-  } else if (type === 'mm') {
-    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-    group.classList.add('mm-label');
-    text.textContent = value.toFixed(1) + ' ㎜';
+  } else {
+    const text = createSVGElement('text');
+    text.textContent = type === 'decimal' ? value.toFixed(3) : value.toFixed(1) + ' ㎜';
+    group.classList.add(type === 'decimal' ? 'decimal-label' : 'mm-label');
     contentGroup.appendChild(text);
   }
 
   group.appendChild(contentGroup);
-
   return group;
 }
 
@@ -277,7 +242,7 @@ function drawLabels(ringIndex, sliceLabels, endAngles, drawLeaders = true, radia
   const innerRadius = ringIndex * ringSpacing + holeRadius;
   const outerRadius = innerRadius + ringSpacing;
   
-  const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  const group = createSVGElement('g');
   group.setAttribute('class', `ring-labels-${ringIndex}`);
   
   for (let i = 1; i <= slices; i++) {
@@ -344,8 +309,8 @@ const rings = [];
 // Fraction rings
 for (let ringIndex = 0; ringIndex < fractionRings.length; ringIndex++) {
   const slices = fractionRings[ringIndex];
-  
   const sliceLabels = new Array(slices).fill(null);
+  
   for (let i = 1; i <= slices; i++) {
     if (gcd(i, slices) === 1) {
       sliceLabels[i - 1] = createLabel('fraction', { numerator: i, denominator: slices });
@@ -354,18 +319,14 @@ for (let ringIndex = 0; ringIndex < fractionRings.length; ringIndex++) {
   
   const sliceAngle = (2 * Math.PI) / slices;
   const endAngles = new Array(slices).fill(0).map((_, idx) => startOffset - (idx + 1) * sliceAngle);
-  const labelAngles = endAngles;
   
-  rings.push({ ringIndex, endAngles, sliceLabels, labelAngles, drawLeaders: true, radialAngle: false, hue: 120 });
+  rings.push({ ringIndex, endAngles, sliceLabels, labelAngles: endAngles, drawLeaders: true, radialAngle: false, hue: 120 });
 }
 
 // Decimal ring
 {
-  const slices = 10;
-  const sliceAngle = (2 * Math.PI) / slices;
-  const endAngles = new Array(slices).fill(0).map((_, idx) => startOffset - (idx + 1) * sliceAngle);
-  
   const allDecimals = concatSortedUniquePriority(concatSortedUniquePriority(decimalFractions, decimalMillimeters, 0.002), decimalValues, 0.004);
+  const endAngles = new Array(10).fill(0).map((_, idx) => startOffset - (idx + 1) * (2 * Math.PI) / 10);
   const labelAngles = allDecimals.map(val => startOffset - val * 2 * Math.PI);
   const sliceLabels = allDecimals.map(val => createLabel('decimal', val));
   
@@ -374,11 +335,9 @@ for (let ringIndex = 0; ringIndex < fractionRings.length; ringIndex++) {
 
 // MM ring
 {
-  const sliceAngle = (2 * Math.PI) / mmValues.length;
-  const endAngles = mmValues.map(v => startOffset - (v / 25.4) * 2 * Math.PI);
-  
   const mmFractions = decimalFractions.map(val => val * 25.4);
   const allMMValues = concatSortedUniquePriority(concatSortedUniquePriority(mmValues, mmFractions, 0.05), decimalValues.map(val => val * 25.4), 0.004 * 25.4);
+  const endAngles = mmValues.map(v => startOffset - (v / 25.4) * 2 * Math.PI);
   const labelAngles = allMMValues.map(val => startOffset - (val / 25.4) * 2 * Math.PI);
   const sliceLabels = allMMValues.map(val => createLabel('mm', val));
   
@@ -517,11 +476,6 @@ function normalizeAngleDelta(deltaRad) {
 function angleFromCenter(point, center) {
   return Math.atan2(point.y - center.y, point.x - center.x);
 }
-
-// Attach custom zoom button handlers
-document.getElementById('zoomIn').addEventListener('click', () => zoomBy(1.2));
-document.getElementById('zoomOut').addEventListener('click', () => zoomBy(1 / 1.2));
-document.getElementById('zoomReset').addEventListener('click', resetZoom);
 
 svg.addEventListener('wheel', (event) => {
   event.preventDefault();
