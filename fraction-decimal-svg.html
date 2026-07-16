@@ -489,34 +489,38 @@ let lastTouchPoint = null;
 let lastPinchDistance = null;
 
 svg.addEventListener('touchstart', (event) => {
-  if (event.touches.length === 1) {
+  if (event.touches.length === 2) {
+    event.preventDefault();
+    lastPinchDistance = Math.hypot(
+      event.touches[1].clientX - event.touches[0].clientX,
+      event.touches[1].clientY - event.touches[0].clientY
+    );
+    lastTouchPoint = null;
+  } else if (event.touches.length === 1) {
     lastTouchPoint = {
       x: event.touches[0].clientX,
       y: event.touches[0].clientY
     };
     lastPinchDistance = null;
-  } else if (event.touches.length === 2) {
-    event.preventDefault();
-    lastTouchPoint = null;
-    lastPinchDistance = Math.hypot(
-      event.touches[1].clientX - event.touches[0].clientX,
-      event.touches[1].clientY - event.touches[0].clientY
-    );
   }
 }, { passive: false });
 
 svg.addEventListener('touchmove', (event) => {
-  if (event.touches.length === 2) {
+  console.log('touchmove fired');
+  if (event.touches.length === 2 && lastPinchDistance !== null) {
     event.preventDefault();
     const currentDistance = Math.hypot(
       event.touches[1].clientX - event.touches[0].clientX,
       event.touches[1].clientY - event.touches[0].clientY
     );
-    if (lastPinchDistance !== null) {
-      const cxDelta = (lastPinchDistance - currentDistance) * 0.5;
+    const cxDelta = (lastPinchDistance - currentDistance) * 0.5;
+    if (Math.abs(cxDelta) > 0.5) {
+      const startTime = performance.now();
       applyZoom(cxDelta);
+      const endTime = performance.now();
+      console.log(`applyZoom took ${(endTime - startTime).toFixed(2)}ms`);
+      lastPinchDistance = currentDistance;
     }
-    lastPinchDistance = currentDistance;
   } else if (event.touches.length === 1 && lastTouchPoint !== null) {
     event.preventDefault();
     const currentPoint = {
@@ -537,15 +541,11 @@ svg.addEventListener('touchmove', (event) => {
 }, { passive: false });
 
 svg.addEventListener('touchend', (event) => {
+  if (event.touches.length < 2) {
+    lastPinchDistance = null;
+  }
   if (event.touches.length === 0) {
     lastTouchPoint = null;
-    lastPinchDistance = null;
-  } else if (event.touches.length === 1) {
-    lastPinchDistance = null;
-    lastTouchPoint = {
-      x: event.touches[0].clientX,
-      y: event.touches[0].clientY
-    };
   }
 });
 
