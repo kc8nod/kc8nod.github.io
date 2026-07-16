@@ -171,11 +171,27 @@ function createArcPath(cx, cy, startAngle, endAngle, innerRadius, outerRadius) {
   ].join(' ');
 }
 
+function getRingSlotRadii(ringIndex) {
+  return {
+    innerRadius: ringBoundaries[ringIndex],
+    outerRadius: ringBoundaries[ringIndex + 1]
+  };
+}
+
+function getRingRadii(ringIndex, thicknessScale = 1) {
+  const { innerRadius: slotInnerRadius, outerRadius: slotOuterRadius } = getRingSlotRadii(ringIndex);
+  const centerRadius = (slotInnerRadius + slotOuterRadius) / 2;
+  const width = (slotOuterRadius - slotInnerRadius) * thicknessScale;
+  return {
+    innerRadius: centerRadius - width / 2,
+    outerRadius: centerRadius + width / 2
+  };
+}
+
 // Draw slices for a ring
-function drawSlices(ringIndex, endAngles, hue) {
+function drawSlices(ringIndex, endAngles, hue, thicknessScale = 1) {
   const slices = endAngles.length;
-  const innerRadius = ringIndex * ringSpacing + holeRadius;
-  const outerRadius = innerRadius + ringSpacing;
+  const { innerRadius, outerRadius } = getRingRadii(ringIndex, thicknessScale);
   const colors = getRingColors(slices, ringIndex, hue);
   
   const group = createSVGElement('g');
@@ -189,7 +205,7 @@ function drawSlices(ringIndex, endAngles, hue) {
     path.setAttribute('d', createArcPath(cx, cy, startAngle, endAngle, innerRadius, outerRadius));
     path.setAttribute('fill', colors[i - 1]);
     path.setAttribute('stroke', 'white');
-    path.setAttribute('stroke-width', '1');
+    path.setAttribute('stroke-width', thicknessScale);
     
     group.appendChild(path);
   }
@@ -239,8 +255,7 @@ function createLabel(type, value) {
 // Draw labels for a ring
 function drawLabels(ringIndex, sliceLabels, endAngles, drawLeaders = true, radialAngle = false) {
   const slices = sliceLabels.length;
-  const innerRadius = ringIndex * ringSpacing + holeRadius;
-  const outerRadius = innerRadius + ringSpacing;
+  const { innerRadius, outerRadius } = getRingSlotRadii(ringIndex);
   
   const group = createSVGElement('g');
   group.setAttribute('class', `ring-labels-${ringIndex}`);
@@ -257,7 +272,7 @@ function drawLabels(ringIndex, sliceLabels, endAngles, drawLeaders = true, radia
       
       // Draw leader line if enabled
       if (drawLeaders) {
-        const lineStartRadius = outerRadius - ringSpacing / 5;
+        const lineStartRadius = outerRadius - (outerRadius - innerRadius) / 5;
         const x1 = cx + lineStartRadius * Math.cos(labelAngle);
         const y1 = cy + lineStartRadius * Math.sin(labelAngle);
         const x2 = cx + lineEndRadius * Math.cos(labelAngle);
@@ -303,6 +318,37 @@ const decimalFractions = new Array(n).fill(0).map((_, idx) => (idx + 1) / n);
 const mmValues = new Array(25).fill(0).map((_, idx) => (idx + 1)).concat([25.4]);
 const decimalMillimeters = mmValues.map(val => val / 25.4);
 
+// Letter Drills
+const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+const letterDrillSizes = [
+    0.234,
+    0.238,
+    0.242,
+    0.246,
+    0.25,
+    0.257,
+    0.261,
+    0.266,
+    0.272,
+    0.277,
+    0.281,
+    0.29,
+    0.295,
+    0.302,
+    0.316,
+    0.323,
+    0.332,
+    0.339,
+    0.348,
+    0.358,
+    0.368,
+    0.377,
+    0.386,
+    0.397,
+    0.404,
+    0.413
+  ];
+
 // Build rings array
 const rings = [];
 
@@ -320,7 +366,7 @@ for (let ringIndex = 0; ringIndex < fractionRings.length; ringIndex++) {
   const sliceAngle = (2 * Math.PI) / slices;
   const endAngles = new Array(slices).fill(0).map((_, idx) => startOffset - (idx + 1) * sliceAngle);
   
-  rings.push({ ringIndex, endAngles, sliceLabels, labelAngles: endAngles, drawLeaders: true, radialAngle: false, hue: 120 });
+  rings.push({ ringIndex, endAngles, sliceLabels, labelAngles: endAngles, drawLeaders: true, radialAngle: false, hue: 120, collapsed: false });
 }
 
 // Decimal ring
@@ -330,7 +376,7 @@ for (let ringIndex = 0; ringIndex < fractionRings.length; ringIndex++) {
   const labelAngles = allDecimals.map(val => startOffset - val * 2 * Math.PI);
   const sliceLabels = allDecimals.map(val => createLabel('decimal', val));
   
-  rings.push({ ringIndex: fractionRings.length, endAngles, sliceLabels, labelAngles, drawLeaders: false, radialAngle: true, hue: 220 });
+  rings.push({ ringIndex: fractionRings.length, endAngles, sliceLabels, labelAngles, drawLeaders: false, radialAngle: true, hue: 220, collapsed: false });
 }
 
 // MM ring
@@ -341,13 +387,38 @@ for (let ringIndex = 0; ringIndex < fractionRings.length; ringIndex++) {
   const labelAngles = allMMValues.map(val => startOffset - (val / 25.4) * 2 * Math.PI);
   const sliceLabels = allMMValues.map(val => createLabel('mm', val));
   
-  rings.push({ ringIndex: fractionRings.length + 1, endAngles, sliceLabels, labelAngles, drawLeaders: false, radialAngle: true, hue: 60 });
+  rings.push({ ringIndex: fractionRings.length + 1, endAngles, sliceLabels, labelAngles, drawLeaders: false, radialAngle: true, hue: 60, collapsed: false });
 }
+
+// // Letter Drill Ring
+// {
+//   const endAngles = letterDrillSizes.map(v => startOffset - (v / 1) * 2 * Math.PI);
+//   const labelAngles = endAngles;
+//   idx = rings.length;
+  
+//   rings.push({ ringIndex: idx, endAngles, sliceLabels: letters, labelAngles, drawLeaders: false, radialAngle: true, hue: 0, collapsed: false });
+// }
 
 // Calculate ring spacing
 const totalRings = rings.length;
-const ringSpacing = (outermostRadius - holeRadius) / totalRings;
-const lineEndRadius = outermostRadius - (2 * ringSpacing) + 2;
+let ringBoundaries = new Array(totalRings + 1)
+  .fill(0)
+  .map((_, idx) => holeRadius + ((outermostRadius - holeRadius) * idx) / totalRings);
+const lineEndRadius = ringBoundaries[Math.max(totalRings - 2, 0)] + 2;
+const COLLAPSED_RING_THICKNESS = 0.2;
+
+function updateRingBoundaries() {
+  const weights = rings.map((ring) => (ring.collapsed ? COLLAPSED_RING_THICKNESS : 1));
+  const totalWeight = weights.reduce((sum, w) => sum + w, 0);
+  const span = outermostRadius - holeRadius;
+  ringBoundaries = [holeRadius];
+
+  let acc = holeRadius;
+  for (let i = 0; i < weights.length; i++) {
+    acc += span * (weights[i] / totalWeight);
+    ringBoundaries.push(acc);
+  }
+}
 
 // Initialize svg-pan-zoom first (it creates its own viewport)
 const MAX_LABEL_SCALE = 2.0;
@@ -378,11 +449,134 @@ viewport.appendChild(chartGroup);
 
 // Draw all rings
 rings.forEach(ring => {
-  drawSlices(ring.ringIndex, ring.endAngles, ring.hue);
+  const thicknessScale = ring.collapsed ? COLLAPSED_RING_THICKNESS : 1;
+  drawSlices(ring.ringIndex, ring.endAngles, ring.hue, thicknessScale);
 });
 rings.forEach(ring => {
   drawLabels(ring.ringIndex, ring.sliceLabels, ring.labelAngles, ring.drawLeaders, ring.radialAngle);
 });
+
+function applyRingVisualState(ring) {
+  const thicknessScale = ring.collapsed ? COLLAPSED_RING_THICKNESS : 1;
+  const { innerRadius, outerRadius } = getRingRadii(ring.ringIndex, thicknessScale);
+  const ringSlicesGroup = chartGroup.querySelector(`.ring-slices-${ring.ringIndex}`);
+  const slicePaths = ringSlicesGroup ? ringSlicesGroup.querySelectorAll('path') : [];
+
+  for (let i = 1; i <= ring.endAngles.length; i++) {
+    const startAngle = (i === 1) ? startOffset : ring.endAngles[i - 2];
+    const endAngle = ring.endAngles[i - 1];
+    const path = slicePaths[i - 1];
+    if (path) {
+      path.setAttribute('d', createArcPath(cx, cy, startAngle, endAngle, innerRadius, outerRadius));
+    }
+  }
+
+  const ringLabelsGroup = chartGroup.querySelector(`.ring-labels-${ring.ringIndex}`);
+  if (ringLabelsGroup) {
+    ringLabelsGroup.style.display = ring.collapsed ? 'none' : '';
+  }
+}
+
+function relayoutRingLabels(ring) {
+  const ringLabelsGroup = chartGroup.querySelector(`.ring-labels-${ring.ringIndex}`);
+  if (!ringLabelsGroup) {
+    return;
+  }
+
+  const { innerRadius, outerRadius } = getRingSlotRadii(ring.ringIndex);
+  const labels = ringLabelsGroup.querySelectorAll('.fraction-label, .decimal-label, .mm-label');
+  const lines = ringLabelsGroup.querySelectorAll('line');
+  let labelCursor = 0;
+  let lineCursor = 0;
+
+  for (let i = 0; i < ring.sliceLabels.length; i++) {
+    if (!ring.sliceLabels[i]) {
+      continue;
+    }
+
+    const labelNode = labels[labelCursor];
+    if (!labelNode) {
+      break;
+    }
+
+    const labelAngle = ring.labelAngles[i];
+    const labelRadius = (innerRadius + outerRadius) / 2;
+    const labelX = cx + labelRadius * Math.cos(labelAngle);
+    const labelY = cy + labelRadius * Math.sin(labelAngle);
+
+    labelNode.dataset.tx = `${labelX}`;
+    labelNode.dataset.ty = `${labelY}`;
+
+    if (labelNode.dataset.radial === '1') {
+      const angle = labelAngle + (rotationDeg * Math.PI) / 180;
+      const flipDeg = Math.cos(angle) < 0 ? 180 : 0;
+      const baseAngleDeg = (labelAngle * 180) / Math.PI;
+      labelNode.setAttribute('transform', `translate(${labelX}, ${labelY}) rotate(${baseAngleDeg + flipDeg})`);
+    } else {
+      labelNode.setAttribute('transform', `translate(${labelX}, ${labelY})`);
+    }
+    labelCursor += 1;
+
+    if (ring.drawLeaders) {
+      const line = lines[lineCursor];
+      if (line) {
+        const lineStartRadius = outerRadius - (outerRadius - innerRadius) / 5;
+        const x1 = cx + lineStartRadius * Math.cos(labelAngle);
+        const y1 = cy + lineStartRadius * Math.sin(labelAngle);
+        const x2 = cx + lineEndRadius * Math.cos(labelAngle);
+        const y2 = cy + lineEndRadius * Math.sin(labelAngle);
+        line.setAttribute('x1', x1);
+        line.setAttribute('y1', y1);
+        line.setAttribute('x2', x2);
+        line.setAttribute('y2', y2);
+      }
+      lineCursor += 1;
+    }
+  }
+}
+
+function applyAllRingVisualStates() {
+  rings.forEach((ring) => {
+    applyRingVisualState(ring);
+    relayoutRingLabels(ring);
+  });
+  updateLabelScale(panZoom.getZoom());
+}
+
+function toggleRingAtScreenPoint(clientX, clientY) {
+  const rect = svg.getBoundingClientRect();
+  const zoom = panZoom.getZoom();
+  const pan = panZoom.getPan();
+  const svgX = (clientX - rect.left - pan.x) / zoom;
+  const svgY = (clientY - rect.top - pan.y) / zoom;
+  const dx = svgX - cx;
+  const dy = svgY - cy;
+  const radius = Math.sqrt(dx * dx + dy * dy);
+
+  if (radius < holeRadius || radius > outermostRadius) {
+    return;
+  }
+
+  let ringIndex = -1;
+  for (let i = 0; i < rings.length; i++) {
+    const inner = ringBoundaries[i];
+    const outer = ringBoundaries[i + 1];
+    const isLastRing = i === rings.length - 1;
+    if (radius >= inner && (radius < outer || (isLastRing && radius <= outer))) {
+      ringIndex = i;
+      break;
+    }
+  }
+
+  if (ringIndex === -1) {
+    return;
+  }
+
+  const ring = rings[ringIndex];
+  ring.collapsed = !ring.collapsed;
+  updateRingBoundaries();
+  applyAllRingVisualStates();
+}
 
 // Custom zoom function that respects anchor point
 function zoomBy(factor) {
@@ -505,6 +699,10 @@ svg.addEventListener('wheel', (event) => {
 
 let lastPinchDistance = null;
 let lastTouchPoint = null;
+let touchStartPoint = null;
+let touchStartTime = 0;
+let touchMoved = false;
+let lastTouchToggleAt = 0;
 
 function getTouchDistance(t1, t2) {
   const dx = t1.clientX - t2.clientX;
@@ -517,11 +715,17 @@ svg.addEventListener('touchstart', (event) => {
     event.preventDefault();
     lastPinchDistance = getTouchDistance(event.touches[0], event.touches[1]);
     lastTouchPoint = null;
+    touchStartPoint = null;
+    touchMoved = true;
   } else if (event.touches.length === 1) {
+    const touch = event.touches[0];
     lastTouchPoint = {
-      x: event.touches[0].clientX,
-      y: event.touches[0].clientY
+      x: touch.clientX,
+      y: touch.clientY
     };
+    touchStartPoint = { ...lastTouchPoint };
+    touchStartTime = Date.now();
+    touchMoved = false;
     lastPinchDistance = null;
   }
 }, { passive: false });
@@ -545,6 +749,9 @@ svg.addEventListener('touchmove', (event) => {
     const prevAngle = angleFromCenter(lastTouchPoint, center);
     const currentAngle = angleFromCenter(currentPoint, center);
     const deltaRad = normalizeAngleDelta(currentAngle - prevAngle);
+    if (Math.abs(deltaRad) > 0.015) {
+      touchMoved = true;
+    }
     const deltaDeg = (deltaRad * 180) / Math.PI;
     rotateBy(deltaDeg);
     lastTouchPoint = currentPoint;
@@ -552,12 +759,29 @@ svg.addEventListener('touchmove', (event) => {
 }, { passive: false });
 
 svg.addEventListener('touchend', (event) => {
+  if (event.touches.length === 0 && touchStartPoint && !touchMoved) {
+    const elapsedMs = Date.now() - touchStartTime;
+    if (elapsedMs < 300) {
+      toggleRingAtScreenPoint(touchStartPoint.x, touchStartPoint.y);
+      lastTouchToggleAt = Date.now();
+    }
+  }
+
   if (event.touches.length < 2) {
     lastPinchDistance = null;
   }
   if (event.touches.length === 0) {
     lastTouchPoint = null;
+    touchStartPoint = null;
+    touchMoved = false;
   }
+});
+
+svg.addEventListener('click', (event) => {
+  if (Date.now() - lastTouchToggleAt < 400) {
+    return;
+  }
+  toggleRingAtScreenPoint(event.clientX, event.clientY);
 });
 
 </script>
