@@ -94,6 +94,84 @@ const fractionRings = [
   64  // 1/64
 ];
 
+const taps = [
+  ['4-40 NC', 0.089],
+['4-48 NF', 0.0935],
+['3mm-0.60mm', 0.0984],
+['1/8-40 NS', 0.1015],
+['5-40 NC', 0.1015],
+['5-44 NF', 0.104],
+['6-32 NC', 0.11],
+['6-36 NS', 0.111],
+['6-40 NF', 0.113],
+['6-48 NS', 0.12],
+['4mm-0.70mm', 0.1338],
+['4mm-0.75mm', 0.1338],
+['8-32 NC', 0.136],
+['8-36 NF', 0.136],
+['8-40 NS', 0.1405],
+['3/16-24 NS', 0.147],
+['10-24 NC', 0.1495],
+['3/16-32 NS', 0.157],
+['10-32 NF', 0.159],
+['5mm-0.90mm', 0.1653],
+['5mm-0.80mm', 0.1693],
+['12-24 NC', 0.177],
+['12-28 NF', 0.182],
+['12-32 NEF', 0.185],
+['14-20 NS', 0.1935],
+['1/4-20 NC', 0.201],
+['14-24 NS', 0.201],
+['6mm-1.00mm', 0.2047],
+['1/4-24 NS', 0.209],
+['1/4-28 NF', 0.213],
+['1/4-32 NEF', 0.2188],
+['1/4-40 NS', 0.228],
+['7mm-1.00mm', 0.2401],
+['5/16-18 NC', 0.257],
+['8mm-1.25mm', 0.2716],
+['5/16-24 NF', 0.272],
+['8mm-1.00mm', 0.2795],
+['5/16-32 NEF', 0.2812],
+['9mm-1.25mm', 0.311],
+['3/8-16 NC', 0.3125],
+['9mm-1.00mm', 0.3189],
+['9mm-0.75mm', 0.3268],
+['3/8-24 NF', 0.332],
+['10mm-1.50mm', 0.3425],
+['10mm-1.25mm', 0.3503],
+['10mm-1.00mm*', 0.3583],
+['7/16-14 NC', 0.368],
+['11mm-1.50mm', 0.3818],
+['7/16-20 NF', 0.3906],
+['12mm-1.75mm', 0.4133],
+['12mm-1.50mm', 0.4212],
+['1/2-13 NC', 0.4219],
+['12mm-1.25mm*', 0.4291],
+['1/2-20 NF', 0.4531],
+['1/2-24 NS', 0.4531],
+['14mm-2.00mm', 0.4803],
+['9/16-12 NC', 0.4844],
+['14mm-1.50mm', 0.4999],
+['9/16-18 NF', 0.5156],
+['5/8-11 NC', 0.5312],
+['16mm-2.00mm', 0.559],
+['5/8-18 NF', 0.5781],
+['16mm-1.50mm', 0.5787],
+['11/16-11 NS', 0.5938],
+['18mm-2.50mm', 0.622],
+['11/16-16 NS', 0.625],
+['3/4-10 NC', 0.6562],
+['3/4-16 NF', 0.6875],
+['20mm-2.50mm', 0.7008],
+['7/8-9 NC', 0.7656],
+['7/8-14 NF', 0.8125],
+['22mm-1.50mm', 0.8228],
+['24mm-3.00mm', 0.8425],
+['1.8 NC', 0.875],
+['24mm-2.00mm', 0.8779]
+]
+
 // SVG parameters
 const outermostRadius = (width-cx) * .95;
 const holeRadius = width * 0.05;
@@ -189,21 +267,21 @@ function getRingRadii(ringIndex, thicknessScale = 1) {
 }
 
 // Draw slices for a ring
-function drawSlices(ringIndex, endAngles, hue, thicknessScale = 1) {
-  const slices = endAngles.length;
+function drawSlices(ringIndex, angles, hue, thicknessScale = 1) {
+  const slices = Math.max(0, angles.length - 1);
   const { innerRadius, outerRadius } = getRingRadii(ringIndex, thicknessScale);
   const colors = getRingColors(slices, ringIndex, hue);
   
   const group = createSVGElement('g');
   group.setAttribute('class', `ring-slices-${ringIndex}`);
   
-  for (let i = 1; i <= slices; i++) {
-    const startAngle = (i === 1) ? startOffset : endAngles[i - 2];
-    const endAngle = endAngles[i - 1];
+  for (let i = 0; i < slices; i++) {
+    const startAngle = angles[i];
+    const endAngle = angles[i + 1];
     
     const path = createSVGElement('path');
     path.setAttribute('d', createArcPath(cx, cy, startAngle, endAngle, innerRadius, outerRadius));
-    path.setAttribute('fill', colors[i - 1]);
+    path.setAttribute('fill', colors[i]);
     path.setAttribute('stroke', 'white');
     path.setAttribute('stroke-width', thicknessScale);
     
@@ -241,10 +319,15 @@ function createLabel(type, value) {
     denText.setAttribute('dy', '0.5em');
     denText.textContent = value.denominator;
     contentGroup.appendChild(denText);
-  } else {
+  } else if (type === 'decimal' || type === 'mm') {
     const text = createSVGElement('text');
     text.textContent = type === 'decimal' ? value.toFixed(3) : value.toFixed(1) + ' ㎜';
     group.classList.add(type === 'decimal' ? 'decimal-label' : 'mm-label');
+    contentGroup.appendChild(text);
+  } else if (type === 'text') {
+    const text = createSVGElement('text');
+    text.textContent = value;
+    group.classList.add('text-label');
     contentGroup.appendChild(text);
   }
 
@@ -312,15 +395,58 @@ function drawLabels(ringIndex, sliceLabels, endAngles, drawLeaders = true, radia
 }
 
 // Pre-compute common decimal/mm values
-const decimalValues = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0];
+const tenths = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0];
 const n = Math.max(...fractionRings);
 const decimalFractions = new Array(n).fill(0).map((_, idx) => (idx + 1) / n);
 const mmValues = new Array(25).fill(0).map((_, idx) => (idx + 1)).concat([25.4]);
 const decimalMillimeters = mmValues.map(val => val / 25.4);
 
 // Letter Drills
-const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+const letters = Array(43).fill(null).map((_, idx) => `#${43-idx}`).concat('ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split(''));
 const letterDrillSizes = [
+  0.089,
+  0.0935,
+  0.096,
+  0.098,
+  0.0995,
+  0.1015,
+  0.104,
+  0.1065,
+  0.11,
+  0.111,
+  0.113,
+  0.116,
+  0.12,
+  0.1285,
+  0.136,
+  0.1405,
+  0.144,
+  0.147,
+  0.1495,
+  0.152,
+  0.154,
+  0.157,
+  0.159,
+  0.161,
+  0.166,
+  0.1695,
+  0.173,
+  0.177,
+  0.18,
+  0.182,
+  0.185,
+  0.189,
+  0.191,
+  0.1935,
+  0.196,
+  0.199,
+  0.201,
+  0.204,
+  0.2055,
+  0.209,
+  0.213,
+  0.221,
+  0.228,
     0.234,
     0.238,
     0.242,
@@ -365,39 +491,47 @@ for (let ringIndex = 0; ringIndex < fractionRings.length; ringIndex++) {
   
   const sliceAngle = (2 * Math.PI) / slices;
   const endAngles = new Array(slices).fill(0).map((_, idx) => startOffset - (idx + 1) * sliceAngle);
+  const angles = [startOffset, ...endAngles];
   
-  rings.push({ ringIndex, endAngles, sliceLabels, labelAngles: endAngles, drawLeaders: true, radialAngle: false, hue: 120, collapsed: false });
+  rings.push({ ringIndex, angles, sliceLabels, labelAngles: endAngles, drawLeaders: true, radialAngle: false, hue: 120, collapsed: false });
 }
 
 // Decimal ring
 {
-  const allDecimals = concatSortedUniquePriority(concatSortedUniquePriority(decimalFractions, decimalMillimeters, 0.002), decimalValues, 0.004);
+  let allDecimals = concatSortedUniquePriority(decimalFractions, decimalMillimeters, 0.002);
+  allDecimals = concatSortedUniquePriority(allDecimals, tenths, 0.004);
+  allDecimals = concatSortedUniquePriority(allDecimals, letterDrillSizes, 0.003);
+
   const endAngles = new Array(10).fill(0).map((_, idx) => startOffset - (idx + 1) * (2 * Math.PI) / 10);
+  const angles = [startOffset, ...endAngles];
   const labelAngles = allDecimals.map(val => startOffset - val * 2 * Math.PI);
   const sliceLabels = allDecimals.map(val => createLabel('decimal', val));
   
-  rings.push({ ringIndex: fractionRings.length, endAngles, sliceLabels, labelAngles, drawLeaders: false, radialAngle: true, hue: 220, collapsed: false });
+  rings.push({ ringIndex: fractionRings.length, angles, sliceLabels, labelAngles, drawLeaders: false, radialAngle: true, hue: 220, collapsed: false });
 }
 
 // MM ring
 {
   const mmFractions = decimalFractions.map(val => val * 25.4);
-  const allMMValues = concatSortedUniquePriority(concatSortedUniquePriority(mmValues, mmFractions, 0.05), decimalValues.map(val => val * 25.4), 0.004 * 25.4);
+  const allMMValues = concatSortedUniquePriority(concatSortedUniquePriority(mmValues, mmFractions, 0.05), tenths.map(val => val * 25.4), 0.004 * 25.4);
   const endAngles = mmValues.map(v => startOffset - (v / 25.4) * 2 * Math.PI);
+  const angles = [startOffset, ...endAngles];
   const labelAngles = allMMValues.map(val => startOffset - (val / 25.4) * 2 * Math.PI);
   const sliceLabels = allMMValues.map(val => createLabel('mm', val));
   
-  rings.push({ ringIndex: fractionRings.length + 1, endAngles, sliceLabels, labelAngles, drawLeaders: false, radialAngle: true, hue: 60, collapsed: false });
+  rings.push({ ringIndex: fractionRings.length + 1, angles, sliceLabels, labelAngles, drawLeaders: false, radialAngle: true, hue: 60, collapsed: false });
 }
 
-// // Letter Drill Ring
-// {
-//   const endAngles = letterDrillSizes.map(v => startOffset - (v / 1) * 2 * Math.PI);
-//   const labelAngles = endAngles;
-//   idx = rings.length;
+// Letter Drill Ring
+{
+  const endAngles = letterDrillSizes.map(v => startOffset - (v / 1) * 2 * Math.PI);
+  const angles = [startOffset-0.53, ...endAngles];
+  const labelAngles = endAngles;
+  const labels = letters.map(letter => createLabel('text', letter));
+  const idx = rings.length;
   
-//   rings.push({ ringIndex: idx, endAngles, sliceLabels: letters, labelAngles, drawLeaders: false, radialAngle: true, hue: 0, collapsed: false });
-// }
+  rings.push({ ringIndex: idx, angles, sliceLabels: labels, labelAngles, drawLeaders: false, radialAngle: true, hue: 0, collapsed: false });
+}
 
 // Calculate ring spacing
 const totalRings = rings.length;
@@ -450,7 +584,7 @@ viewport.appendChild(chartGroup);
 // Draw all rings
 rings.forEach(ring => {
   const thicknessScale = ring.collapsed ? COLLAPSED_RING_THICKNESS : 1;
-  drawSlices(ring.ringIndex, ring.endAngles, ring.hue, thicknessScale);
+  drawSlices(ring.ringIndex, ring.angles, ring.hue, thicknessScale);
 });
 rings.forEach(ring => {
   drawLabels(ring.ringIndex, ring.sliceLabels, ring.labelAngles, ring.drawLeaders, ring.radialAngle);
@@ -462,10 +596,10 @@ function applyRingVisualState(ring) {
   const ringSlicesGroup = chartGroup.querySelector(`.ring-slices-${ring.ringIndex}`);
   const slicePaths = ringSlicesGroup ? ringSlicesGroup.querySelectorAll('path') : [];
 
-  for (let i = 1; i <= ring.endAngles.length; i++) {
-    const startAngle = (i === 1) ? startOffset : ring.endAngles[i - 2];
-    const endAngle = ring.endAngles[i - 1];
-    const path = slicePaths[i - 1];
+  for (let i = 0; i < ring.angles.length - 1; i++) {
+    const startAngle = ring.angles[i];
+    const endAngle = ring.angles[i + 1];
+    const path = slicePaths[i];
     if (path) {
       path.setAttribute('d', createArcPath(cx, cy, startAngle, endAngle, innerRadius, outerRadius));
     }
