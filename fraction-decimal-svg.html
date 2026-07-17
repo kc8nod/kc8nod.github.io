@@ -267,29 +267,86 @@ function getRingRadii(ringIndex, thicknessScale = 1) {
   };
 }
 
-// Draw slices for a ring
-function drawSlices(ringIndex, angles, hue, thicknessScale = 1) {
-  const slices = Math.max(0, angles.length - 1);
-  const { innerRadius, outerRadius } = getRingRadii(ringIndex, thicknessScale);
-  const colors = getRingColors(slices, ringIndex, hue);
-  
-  const group = createSVGElement('g');
-  group.setAttribute('class', `ring-slices-${ringIndex}`);
-  
+function getRenderedRingRadii(ring) {
+  const thicknessScale = ring.collapsed ? COLLAPSED_RING_THICKNESS : 1;
+  return getRingRadii(ring.ringIndex, thicknessScale);
+}
+
+function getLabelPosition(ring, labelAngle) {
+  const { innerRadius, outerRadius } = getRingSlotRadii(ring.ringIndex);
+  const labelRadius = (innerRadius + outerRadius) / 2;
+  return {
+    x: cx + labelRadius * Math.cos(labelAngle),
+    y: cy + labelRadius * Math.sin(labelAngle)
+  };
+}
+
+function applyLabelTransform(labelNode, labelAngle, x, y) {
+  labelNode.dataset.tx = `${x}`;
+  labelNode.dataset.ty = `${y}`;
+  labelNode.dataset.baseAngle = `${labelAngle}`;
+
+  if (labelNode.dataset.radial === '1') {
+    const angle = labelAngle + (rotationDeg * Math.PI) / 180;
+    const flipDeg = Math.cos(angle) < 0 ? 180 : 0;
+    const baseAngleDeg = (labelAngle * 180) / Math.PI;
+    labelNode.setAttribute('transform', `translate(${x}, ${y}) rotate(${baseAngleDeg + flipDeg})`);
+  } else {
+    labelNode.setAttribute('transform', `translate(${x}, ${y})`);
+  }
+}
+
+function applyLabelScale() {
+  chartGroup.querySelectorAll('.fraction-label .label-content').forEach((label) => {
+    label.setAttribute('transform', `rotate(${-rotationDeg}) scale(${labelScale})`);
+  });
+
+  chartGroup.querySelectorAll('.decimal-label .label-content, .mm-label .label-content, .text-label .label-content').forEach((label) => {
+    label.setAttribute('transform', `scale(${labelScale})`);
+  });
+}
+
+function getLeaderLineEndRadius() {
+  return ringBoundaries[fractionRings.length] + 10;
+}
+
+// Draw or update slices for a ring
+function drawSlices(ring, existingGroup = null) {
+  const slices = Math.max(0, ring.angles.length - 1);
+  const { innerRadius, outerRadius } = getRenderedRingRadii(ring);
+  const thicknessScale = ring.collapsed ? COLLAPSED_RING_THICKNESS : 1;
+  const colors = getRingColors(slices, ring.ringIndex, ring.hue);
+  const group = existingGroup || createSVGElement('g');
+
+  if (!existingGroup) {
+    group.setAttribute('class', `ring-slices-${ring.ringIndex}`);
+  }
+
+  const paths = existingGroup ? group.querySelectorAll('path') : [];
+
   for (let i = 0; i < slices; i++) {
-    const startAngle = angles[i];
-    const endAngle = angles[i + 1];
-    
-    const path = createSVGElement('path');
+    const startAngle = ring.angles[i];
+    const endAngle = ring.angles[i + 1];
+    const path = existingGroup ? paths[i] : createSVGElement('path');
+    if (!path) {
+      break;
+    }
+
     path.setAttribute('d', createArcPath(cx, cy, startAngle, endAngle, innerRadius, outerRadius));
     path.setAttribute('fill', colors[i]);
     path.setAttribute('stroke', 'white');
     path.setAttribute('stroke-width', thicknessScale);
-    
-    group.appendChild(path);
+
+    if (!existingGroup) {
+      group.appendChild(path);
+    }
   }
-  
-  chartGroup.appendChild(group);
+
+  if (!existingGroup) {
+    chartGroup.appendChild(group);
+  }
+
+  return group;
 }
 
 function createLabel(type, value) {
@@ -358,15 +415,13 @@ function drawLabels(ring, existingGroup = null) {
     }
 
     const labelAngle = ring.labelAngles[i];
-    const labelRadius = (innerRadius + outerRadius) / 2;
-    const labelX = cx + labelRadius * Math.cos(labelAngle);
-    const labelY = cy + labelRadius * Math.sin(labelAngle);
+    const { x: labelX, y: labelY } = getLabelPosition(ring, labelAngle);
 
     if (ring.drawLeaders) {
       const lineStartRadius = outerRadius - (outerRadius - innerRadius) / 5;
       const x1 = cx + lineStartRadius * Math.cos(labelAngle);
       const y1 = cy + lineStartRadius * Math.sin(labelAngle);
-      const lineEndRadius = ringBoundaries[fractionRings.length] + 10;
+      const lineEndRadius = getLeaderLineEndRadius();
       const x2 = cx + lineEndRadius * Math.cos(labelAngle);
       const y2 = cy + lineEndRadius * Math.sin(labelAngle);
 
@@ -390,21 +445,13 @@ function drawLabels(ring, existingGroup = null) {
       break;
     }
 
-    labelNode.dataset.tx = `${labelX}`;
-    labelNode.dataset.ty = `${labelY}`;
-
     if (ring.radialAngle) {
-      const angle = labelAngle + (rotationDeg * Math.PI) / 180;
-      const flipDeg = Math.cos(angle) < 0 ? 180 : 0;
-      const baseAngleDeg = (labelAngle * 180) / Math.PI;
-      labelNode.setAttribute('transform', `translate(${labelX}, ${labelY}) rotate(${baseAngleDeg + flipDeg})`);
-      labelNode.dataset.baseAngle = `${labelAngle}`;
       labelNode.dataset.radial = '1';
     } else {
-      labelNode.setAttribute('transform', `translate(${labelX}, ${labelY})`);
-      delete labelNode.dataset.baseAngle;
       delete labelNode.dataset.radial;
     }
+
+    applyLabelTransform(labelNode, labelAngle, labelX, labelY);
 
     if (!existingGroup) {
       group.appendChild(labelNode);
@@ -417,6 +464,98 @@ function drawLabels(ring, existingGroup = null) {
   }
 
   return group;
+}
+
+function buildFractionRing(ringIndex, slices) {
+  const sliceLabels = new Array(slices).fill(null);
+
+  for (let i = 1; i <= slices; i++) {
+    if (gcd(i, slices) === 1) {
+      sliceLabels[i - 1] = createLabel('fraction', { numerator: i, denominator: slices });
+    }
+  }
+
+  const sliceAngle = (2 * Math.PI) / slices;
+  const endAngles = new Array(slices).fill(0).map((_, idx) => startOffset - (idx + 1) * sliceAngle);
+  return {
+    ringIndex,
+    angles: [startOffset, ...endAngles],
+    sliceLabels,
+    labelAngles: endAngles,
+    drawLeaders: true,
+    radialAngle: false,
+    hue: 120,
+    collapsed: false
+  };
+}
+
+function buildDecimalRing(ringIndex) {
+  let allDecimals = concatSortedUniquePriority(decimalFractions, decimalMillimeters, 0.002);
+  allDecimals = concatSortedUniquePriority(allDecimals, tenths, 0.004);
+  allDecimals = concatSortedUniquePriority(allDecimals, letterDrillSizes, 0.003);
+
+  const endAngles = new Array(10).fill(0).map((_, idx) => startOffset - (idx + 1) * (2 * Math.PI) / 10);
+  return {
+    ringIndex,
+    angles: [startOffset, ...endAngles],
+    sliceLabels: allDecimals.map((val) => createLabel('decimal', val)),
+    labelAngles: allDecimals.map((val) => startOffset - val * 2 * Math.PI),
+    drawLeaders: false,
+    radialAngle: true,
+    hue: 220,
+    collapsed: false
+  };
+}
+
+function buildMillimeterRing(ringIndex) {
+  const mmFractions = decimalFractions.map((val) => val * 25.4);
+  const allMMValues = concatSortedUniquePriority(
+    concatSortedUniquePriority(mmValues, mmFractions, 0.05),
+    tenths.map((val) => val * 25.4),
+    0.004 * 25.4
+  );
+  const endAngles = mmValues.map((value) => startOffset - (value / 25.4) * 2 * Math.PI);
+  return {
+    ringIndex,
+    angles: [startOffset, ...endAngles],
+    sliceLabels: allMMValues.map((val) => createLabel('mm', val)),
+    labelAngles: allMMValues.map((val) => startOffset - (val / 25.4) * 2 * Math.PI),
+    drawLeaders: false,
+    radialAngle: true,
+    hue: 60,
+    collapsed: false
+  };
+}
+
+function buildTextRing(ringIndex, labels, labelAngles, angles, hue) {
+  return {
+    ringIndex,
+    angles,
+    sliceLabels: labels.map((label) => createLabel('text', label)),
+    labelAngles,
+    drawLeaders: false,
+    radialAngle: true,
+    hue,
+    collapsed: false
+  };
+}
+
+function renderRing(ring) {
+  drawSlices(ring);
+  drawLabels(ring);
+}
+
+function updateRing(ring) {
+  const sliceGroup = chartGroup.querySelector(`.ring-slices-${ring.ringIndex}`);
+  if (sliceGroup) {
+    drawSlices(ring, sliceGroup);
+  }
+
+  const ringLabelsGroup = chartGroup.querySelector(`.ring-labels-${ring.ringIndex}`);
+  if (ringLabelsGroup) {
+    ringLabelsGroup.style.display = ring.collapsed ? 'none' : '';
+    drawLabels(ring, ringLabelsGroup);
+  }
 }
 
 // Pre-compute common decimal/mm values
@@ -505,69 +644,37 @@ const rings = [];
 
 // Fraction rings
 for (let ringIndex = 0; ringIndex < fractionRings.length; ringIndex++) {
-  const slices = fractionRings[ringIndex];
-  const sliceLabels = new Array(slices).fill(null);
-  
-  for (let i = 1; i <= slices; i++) {
-    if (gcd(i, slices) === 1) {
-      sliceLabels[i - 1] = createLabel('fraction', { numerator: i, denominator: slices });
-    }
-  }
-  
-  const sliceAngle = (2 * Math.PI) / slices;
-  const endAngles = new Array(slices).fill(0).map((_, idx) => startOffset - (idx + 1) * sliceAngle);
-  const angles = [startOffset, ...endAngles];
-  
-  rings.push({ ringIndex, angles, sliceLabels, labelAngles: endAngles, drawLeaders: true, radialAngle: false, hue: 120, collapsed: false });
+  rings.push(buildFractionRing(ringIndex, fractionRings[ringIndex]));
 }
 
 // Decimal ring
 {
-  let allDecimals = concatSortedUniquePriority(decimalFractions, decimalMillimeters, 0.002);
-  allDecimals = concatSortedUniquePriority(allDecimals, tenths, 0.004);
-  allDecimals = concatSortedUniquePriority(allDecimals, letterDrillSizes, 0.003);
-
-  const endAngles = new Array(10).fill(0).map((_, idx) => startOffset - (idx + 1) * (2 * Math.PI) / 10);
-  const angles = [startOffset, ...endAngles];
-  const labelAngles = allDecimals.map(val => startOffset - val * 2 * Math.PI);
-  const sliceLabels = allDecimals.map(val => createLabel('decimal', val));
-  
-  rings.push({ ringIndex: fractionRings.length, angles, sliceLabels, labelAngles, drawLeaders: false, radialAngle: true, hue: 220, collapsed: false });
+  rings.push(buildDecimalRing(fractionRings.length));
 }
 
 // MM ring
 {
-  const mmFractions = decimalFractions.map(val => val * 25.4);
-  const allMMValues = concatSortedUniquePriority(concatSortedUniquePriority(mmValues, mmFractions, 0.05), tenths.map(val => val * 25.4), 0.004 * 25.4);
-  const endAngles = mmValues.map(v => startOffset - (v / 25.4) * 2 * Math.PI);
-  const angles = [startOffset, ...endAngles];
-  const labelAngles = allMMValues.map(val => startOffset - (val / 25.4) * 2 * Math.PI);
-  const sliceLabels = allMMValues.map(val => createLabel('mm', val));
-  
-  rings.push({ ringIndex: fractionRings.length + 1, angles, sliceLabels, labelAngles, drawLeaders: false, radialAngle: true, hue: 60, collapsed: false });
+  rings.push(buildMillimeterRing(fractionRings.length + 1));
 }
 
 // Letter Drill Ring
 {
   const labelAngles = letterDrillSizes.map(v => startOffset - (v / 1) * 2 * Math.PI);
   const angles = [labelAngles[0]+0.02, (labelAngles[42] + labelAngles[43])/2, labelAngles[labelAngles.length-1]-0.02];
-  const labels = letters.map(letter => createLabel('text', letter));
   const idx = rings.length;
-  
-  rings.push({ ringIndex: idx, angles, sliceLabels: labels, labelAngles, drawLeaders: false, radialAngle: true, hue: 0, collapsed: false });
+
+  rings.push(buildTextRing(idx, letters, labelAngles, angles, 0));
 }
 
 // Tap Hole Ring
 {
   const labelAngles = [];
-  const labels = [];
   for (const [tapName, tapSize] of taps) {
     const angle = startOffset - (tapSize / 1) * 2 * Math.PI;
     labelAngles.push(angle);
-    labels.push(createLabel('text', tapName));
   }
   const angles = [labelAngles[0]+0.02, labelAngles[labelAngles.length-1]-0.02];
-  rings.push({ ringIndex: rings.length, angles, sliceLabels: labels, labelAngles, drawLeaders: false, radialAngle: true, hue: 120, collapsed: false });
+  rings.push(buildTextRing(rings.length, taps.map(([tapName]) => tapName), labelAngles, angles, 120));
 }
 
 // Calculate ring spacing
@@ -618,42 +725,11 @@ chartGroup.setAttribute('id', 'chartGroup');
 viewport.appendChild(chartGroup);
 
 // Draw all rings
-rings.forEach(ring => {
-  const thicknessScale = ring.collapsed ? COLLAPSED_RING_THICKNESS : 1;
-  drawSlices(ring.ringIndex, ring.angles, ring.hue, thicknessScale);
-});
-rings.forEach(ring => {
-  drawLabels(ring);
-});
-
-function applyRingVisualState(ring) {
-  const thicknessScale = ring.collapsed ? COLLAPSED_RING_THICKNESS : 1;
-  const { innerRadius, outerRadius } = getRingRadii(ring.ringIndex, thicknessScale);
-  const ringSlicesGroup = chartGroup.querySelector(`.ring-slices-${ring.ringIndex}`);
-  const slicePaths = ringSlicesGroup ? ringSlicesGroup.querySelectorAll('path') : [];
-
-  for (let i = 0; i < ring.angles.length - 1; i++) {
-    const startAngle = ring.angles[i];
-    const endAngle = ring.angles[i + 1];
-    const path = slicePaths[i];
-    if (path) {
-      path.setAttribute('d', createArcPath(cx, cy, startAngle, endAngle, innerRadius, outerRadius));
-    }
-  }
-
-  const ringLabelsGroup = chartGroup.querySelector(`.ring-labels-${ring.ringIndex}`);
-  if (ringLabelsGroup) {
-    ringLabelsGroup.style.display = ring.collapsed ? 'none' : '';
-  }
-}
+rings.forEach(renderRing);
 
 function applyAllRingVisualStates() {
   rings.forEach((ring) => {
-    applyRingVisualState(ring);
-    const ringLabelsGroup = chartGroup.querySelector(`.ring-labels-${ring.ringIndex}`);
-    if (ringLabelsGroup) {
-      drawLabels(ring, ringLabelsGroup);
-    }
+    updateRing(ring);
   });
   updateLabelScale(panZoom.getZoom());
 }
@@ -711,14 +787,7 @@ function zoomBy(factor) {
 
 function updateLabelScale(zoom) {
   labelScale = zoom > MAX_LABEL_SCALE ? MAX_LABEL_SCALE / zoom : 1;
-
-  chartGroup.querySelectorAll('.fraction-label .label-content').forEach((label) => {
-    label.setAttribute('transform', `rotate(${-rotationDeg}) scale(${labelScale})`);
-  });
-
-  chartGroup.querySelectorAll('.decimal-label .label-content, .mm-label .label-content, .text-label .label-content').forEach((label) => {
-    label.setAttribute('transform', `scale(${labelScale})`);
-  });
+  applyLabelScale();
 }
 
 function updateAnchorForRotation() {
@@ -751,20 +820,15 @@ updateAnchorForRotation();
 function rotateBy(deltaDeg) {
   rotationDeg = (rotationDeg + deltaDeg) % 360;
   chartGroup.setAttribute('transform', `rotate(${rotationDeg} ${cx} ${cy})`);
-  
-  chartGroup.querySelectorAll('.fraction-label .label-content').forEach((label) => {
-    label.setAttribute('transform', `rotate(${-rotationDeg}) scale(${labelScale})`);
-  });
 
   chartGroup.querySelectorAll('[data-radial="1"]').forEach((label) => {
     const baseAngle = parseFloat(label.dataset.baseAngle || '0');
-    const angle = baseAngle + (rotationDeg * Math.PI) / 180;
-    const flipDeg = Math.cos(angle) < 0 ? 180 : 0;
-    const baseAngleDeg = (baseAngle * 180) / Math.PI;
     const tx = label.dataset.tx || '0';
     const ty = label.dataset.ty || '0';
-    label.setAttribute('transform', `translate(${tx}, ${ty}) rotate(${baseAngleDeg + flipDeg})`);
+    applyLabelTransform(label, baseAngle, tx, ty);
   });
+
+  applyLabelScale();
 
   // Don't update anchorScreenPoint - it stays fixed on screen
   // Only update the SVG point that corresponds to that screen position
