@@ -533,7 +533,7 @@ function buildMillimeterRing(ringIndex) {
   };
 }
 
-function buildTextRing(ringIndex, labels, labelAngles, angles, hue) {
+function buildTextRing(ringIndex, labels, labelAngles, angles, hue, collapsed = false) {
   return {
     ringIndex,
     angles,
@@ -542,7 +542,7 @@ function buildTextRing(ringIndex, labels, labelAngles, angles, hue) {
     drawLeaders: false,
     radialAngle: true,
     hue,
-    collapsed: false,
+    collapsed,
     sliceGroup: null,
     labelGroup: null
   };
@@ -551,6 +551,9 @@ function buildTextRing(ringIndex, labels, labelAngles, angles, hue) {
 function renderRing(ring) {
   ring.sliceGroup = drawSlices(ring);
   ring.labelGroup = drawLabels(ring);
+  if (ring.labelGroup) {
+    ring.labelGroup.style.display = ring.collapsed ? 'none' : '';
+  }
 }
 
 function updateRing(ring) {
@@ -669,7 +672,7 @@ for (let ringIndex = 0; ringIndex < fractionRings.length; ringIndex++) {
   const idx = rings.length;
   const angles = [labelAngles[0] + 0.02, (labelAngles[42] + labelAngles[43]) / 2, labelAngles[labelAngles.length - 1] - 0.02];
 
-  rings.push(buildTextRing(idx, letters, labelAngles, angles, 0));
+  rings.push(buildTextRing(idx, letters, labelAngles, angles, 0, true));
 }
 
 // Tap Hole Ring
@@ -680,7 +683,7 @@ for (let ringIndex = 0; ringIndex < fractionRings.length; ringIndex++) {
     labelAngles.push(angle);
   }
   const angles = [labelAngles[0] + 0.02, labelAngles[labelAngles.length - 1] - 0.02];
-  rings.push(buildTextRing(rings.length, taps.map(([tapName]) => tapName), labelAngles, angles, 120));
+  rings.push(buildTextRing(rings.length, taps.map(([tapName]) => tapName), labelAngles, angles, 120, true));
 }
 
 // Calculate ring spacing
@@ -731,6 +734,7 @@ chartGroup.setAttribute('id', 'chartGroup');
 viewport.appendChild(chartGroup);
 
 // Draw all rings
+updateRingBoundaries();
 rings.forEach(renderRing);
 
 function applyAllRingVisualStates() {
