@@ -485,7 +485,9 @@ function buildFractionRing(ringIndex, slices) {
     drawLeaders: true,
     radialAngle: false,
     hue: 120,
-    collapsed: false
+    collapsed: false,
+    sliceGroup: null,
+    labelGroup: null
   };
 }
 
@@ -503,7 +505,9 @@ function buildDecimalRing(ringIndex) {
     drawLeaders: false,
     radialAngle: true,
     hue: 220,
-    collapsed: false
+    collapsed: false,
+    sliceGroup: null,
+    labelGroup: null
   };
 }
 
@@ -523,7 +527,9 @@ function buildMillimeterRing(ringIndex) {
     drawLeaders: false,
     radialAngle: true,
     hue: 60,
-    collapsed: false
+    collapsed: false,
+    sliceGroup: null,
+    labelGroup: null
   };
 }
 
@@ -536,25 +542,25 @@ function buildTextRing(ringIndex, labels, labelAngles, angles, hue) {
     drawLeaders: false,
     radialAngle: true,
     hue,
-    collapsed: false
+    collapsed: false,
+    sliceGroup: null,
+    labelGroup: null
   };
 }
 
 function renderRing(ring) {
-  drawSlices(ring);
-  drawLabels(ring);
+  ring.sliceGroup = drawSlices(ring);
+  ring.labelGroup = drawLabels(ring);
 }
 
 function updateRing(ring) {
-  const sliceGroup = chartGroup.querySelector(`.ring-slices-${ring.ringIndex}`);
-  if (sliceGroup) {
-    drawSlices(ring, sliceGroup);
+  if (ring.sliceGroup) {
+    drawSlices(ring, ring.sliceGroup);
   }
 
-  const ringLabelsGroup = chartGroup.querySelector(`.ring-labels-${ring.ringIndex}`);
-  if (ringLabelsGroup) {
-    ringLabelsGroup.style.display = ring.collapsed ? 'none' : '';
-    drawLabels(ring, ringLabelsGroup);
+  if (ring.labelGroup) {
+    ring.labelGroup.style.display = ring.collapsed ? 'none' : '';
+    drawLabels(ring, ring.labelGroup);
   }
 }
 
@@ -660,8 +666,8 @@ for (let ringIndex = 0; ringIndex < fractionRings.length; ringIndex++) {
 // Letter Drill Ring
 {
   const labelAngles = letterDrillSizes.map(v => startOffset - (v / 1) * 2 * Math.PI);
-  const angles = [labelAngles[0]+0.02, (labelAngles[42] + labelAngles[43])/2, labelAngles[labelAngles.length-1]-0.02];
   const idx = rings.length;
+  const angles = [labelAngles[0] + 0.02, (labelAngles[42] + labelAngles[43]) / 2, labelAngles[labelAngles.length - 1] - 0.02];
 
   rings.push(buildTextRing(idx, letters, labelAngles, angles, 0));
 }
@@ -673,7 +679,7 @@ for (let ringIndex = 0; ringIndex < fractionRings.length; ringIndex++) {
     const angle = startOffset - (tapSize / 1) * 2 * Math.PI;
     labelAngles.push(angle);
   }
-  const angles = [labelAngles[0]+0.02, labelAngles[labelAngles.length-1]-0.02];
+  const angles = [labelAngles[0] + 0.02, labelAngles[labelAngles.length - 1] - 0.02];
   rings.push(buildTextRing(rings.length, taps.map(([tapName]) => tapName), labelAngles, angles, 120));
 }
 
