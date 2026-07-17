@@ -336,64 +336,87 @@ function createLabel(type, value) {
   return group;
 }
 
-// Draw labels for a ring
-function drawLabels(ringIndex, sliceLabels, endAngles, drawLeaders = true, radialAngle = false) {
-  const slices = sliceLabels.length;
-  const { innerRadius, outerRadius } = getRingSlotRadii(ringIndex);
-  
-  const group = createSVGElement('g');
-  group.setAttribute('class', `ring-labels-${ringIndex}`);
-  
-  for (let i = 1; i <= slices; i++) {
-    const endAngle = endAngles[i - 1];
-    const labelText = sliceLabels && sliceLabels[i - 1];
-    
-    if (labelText) {
-      const labelAngle = endAngle;
-      const labelRadius = (innerRadius + outerRadius) / 2;
-      const labelX = cx + labelRadius * Math.cos(labelAngle);
-      const labelY = cy + labelRadius * Math.sin(labelAngle);
-      
-      // Draw leader line if enabled
-      if (drawLeaders) {
-        const lineStartRadius = outerRadius - (outerRadius - innerRadius) / 5;
-        const x1 = cx + lineStartRadius * Math.cos(labelAngle);
-        const y1 = cy + lineStartRadius * Math.sin(labelAngle);
-        const lineEndRadius = ringBoundaries[fractionRings.length] + 10;
-        const x2 = cx + lineEndRadius * Math.cos(labelAngle);
-        const y2 = cy + lineEndRadius * Math.sin(labelAngle);
-        
-        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+// Draw or relayout labels for a ring
+function drawLabels(ring, existingGroup = null) {
+  const { innerRadius, outerRadius } = getRingSlotRadii(ring.ringIndex);
+  const group = existingGroup || createSVGElement('g');
+  const selector = '.fraction-label, .decimal-label, .mm-label, .text-label';
+
+  if (!existingGroup) {
+    group.setAttribute('class', `ring-labels-${ring.ringIndex}`);
+  }
+
+  const labels = existingGroup ? group.querySelectorAll(selector) : [];
+  const lines = existingGroup ? group.querySelectorAll('line') : [];
+  let labelCursor = 0;
+  let lineCursor = 0;
+
+  for (let i = 0; i < ring.sliceLabels.length; i++) {
+    const labelText = ring.sliceLabels[i];
+    if (!labelText) {
+      continue;
+    }
+
+    const labelAngle = ring.labelAngles[i];
+    const labelRadius = (innerRadius + outerRadius) / 2;
+    const labelX = cx + labelRadius * Math.cos(labelAngle);
+    const labelY = cy + labelRadius * Math.sin(labelAngle);
+
+    if (ring.drawLeaders) {
+      const lineStartRadius = outerRadius - (outerRadius - innerRadius) / 5;
+      const x1 = cx + lineStartRadius * Math.cos(labelAngle);
+      const y1 = cy + lineStartRadius * Math.sin(labelAngle);
+      const lineEndRadius = ringBoundaries[fractionRings.length] + 10;
+      const x2 = cx + lineEndRadius * Math.cos(labelAngle);
+      const y2 = cy + lineEndRadius * Math.sin(labelAngle);
+
+      const line = existingGroup ? lines[lineCursor] : document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      if (line) {
         line.setAttribute('x1', x1);
         line.setAttribute('y1', y1);
         line.setAttribute('x2', x2);
         line.setAttribute('y2', y2);
         line.setAttribute('stroke', 'rgba(0, 0, 0, 0.6)');
         line.setAttribute('stroke-width', '2');
-        
-        group.appendChild(line);
+        if (!existingGroup) {
+          group.appendChild(line);
+        }
       }
-      
-      // Draw label - it's an SVG element
-      const clonedLabel = labelText.cloneNode(true);
-      clonedLabel.setAttribute('transform', `translate(${labelX}, ${labelY})`);
-      clonedLabel.dataset.tx = `${labelX}`;
-      clonedLabel.dataset.ty = `${labelY}`;
-      
-      if (radialAngle) {
-        const angleDeg = (labelAngle * 180) / Math.PI;
-        const flipDeg = Math.cos(labelAngle) < 0 ? 180 : 0;
-        const existingTransform = clonedLabel.getAttribute('transform');
-        clonedLabel.setAttribute('transform', `${existingTransform} rotate(${angleDeg + flipDeg})`);
-        clonedLabel.dataset.baseAngle = `${labelAngle}`;
-        clonedLabel.dataset.radial = '1';
-      }
-      
-      group.appendChild(clonedLabel);
+      lineCursor += 1;
     }
+
+    const labelNode = existingGroup ? labels[labelCursor] : labelText.cloneNode(true);
+    if (!labelNode) {
+      break;
+    }
+
+    labelNode.dataset.tx = `${labelX}`;
+    labelNode.dataset.ty = `${labelY}`;
+
+    if (ring.radialAngle) {
+      const angle = labelAngle + (rotationDeg * Math.PI) / 180;
+      const flipDeg = Math.cos(angle) < 0 ? 180 : 0;
+      const baseAngleDeg = (labelAngle * 180) / Math.PI;
+      labelNode.setAttribute('transform', `translate(${labelX}, ${labelY}) rotate(${baseAngleDeg + flipDeg})`);
+      labelNode.dataset.baseAngle = `${labelAngle}`;
+      labelNode.dataset.radial = '1';
+    } else {
+      labelNode.setAttribute('transform', `translate(${labelX}, ${labelY})`);
+      delete labelNode.dataset.baseAngle;
+      delete labelNode.dataset.radial;
+    }
+
+    if (!existingGroup) {
+      group.appendChild(labelNode);
+    }
+    labelCursor += 1;
   }
-  
-  chartGroup.appendChild(group);
+
+  if (!existingGroup) {
+    chartGroup.appendChild(group);
+  }
+
+  return group;
 }
 
 // Pre-compute common decimal/mm values
@@ -600,7 +623,7 @@ rings.forEach(ring => {
   drawSlices(ring.ringIndex, ring.angles, ring.hue, thicknessScale);
 });
 rings.forEach(ring => {
-  drawLabels(ring.ringIndex, ring.sliceLabels, ring.labelAngles, ring.drawLeaders, ring.radialAngle);
+  drawLabels(ring);
 });
 
 function applyRingVisualState(ring) {
@@ -624,69 +647,13 @@ function applyRingVisualState(ring) {
   }
 }
 
-function relayoutRingLabels(ring) {
-  const ringLabelsGroup = chartGroup.querySelector(`.ring-labels-${ring.ringIndex}`);
-  if (!ringLabelsGroup) {
-    return;
-  }
-
-  const { innerRadius, outerRadius } = getRingSlotRadii(ring.ringIndex);
-  const labels = ringLabelsGroup.querySelectorAll('.fraction-label, .decimal-label, .mm-label, .text-label');
-  const lines = ringLabelsGroup.querySelectorAll('line');
-  let labelCursor = 0;
-  let lineCursor = 0;
-
-  for (let i = 0; i < ring.sliceLabels.length; i++) {
-    if (!ring.sliceLabels[i]) {
-      continue;
-    }
-
-    const labelNode = labels[labelCursor];
-    if (!labelNode) {
-      break;
-    }
-
-    const labelAngle = ring.labelAngles[i];
-    const labelRadius = (innerRadius + outerRadius) / 2;
-    const labelX = cx + labelRadius * Math.cos(labelAngle);
-    const labelY = cy + labelRadius * Math.sin(labelAngle);
-
-    labelNode.dataset.tx = `${labelX}`;
-    labelNode.dataset.ty = `${labelY}`;
-
-    if (labelNode.dataset.radial === '1') {
-      const angle = labelAngle + (rotationDeg * Math.PI) / 180;
-      const flipDeg = Math.cos(angle) < 0 ? 180 : 0;
-      const baseAngleDeg = (labelAngle * 180) / Math.PI;
-      labelNode.setAttribute('transform', `translate(${labelX}, ${labelY}) rotate(${baseAngleDeg + flipDeg})`);
-    } else {
-      labelNode.setAttribute('transform', `translate(${labelX}, ${labelY})`);
-    }
-    labelCursor += 1;
-
-    if (ring.drawLeaders) {
-      const line = lines[lineCursor];
-      if (line) {
-        const lineStartRadius = outerRadius - (outerRadius - innerRadius) / 5;
-        const x1 = cx + lineStartRadius * Math.cos(labelAngle);
-        const y1 = cy + lineStartRadius * Math.sin(labelAngle);
-        const lineEndRadius = ringBoundaries[fractionRings.length] + 10; // Extend line beyond outer radius
-        const x2 = cx + lineEndRadius * Math.cos(labelAngle);
-        const y2 = cy + lineEndRadius * Math.sin(labelAngle);
-        line.setAttribute('x1', x1);
-        line.setAttribute('y1', y1);
-        line.setAttribute('x2', x2);
-        line.setAttribute('y2', y2);
-      }
-      lineCursor += 1;
-    }
-  }
-}
-
 function applyAllRingVisualStates() {
   rings.forEach((ring) => {
     applyRingVisualState(ring);
-    relayoutRingLabels(ring);
+    const ringLabelsGroup = chartGroup.querySelector(`.ring-labels-${ring.ringIndex}`);
+    if (ringLabelsGroup) {
+      drawLabels(ring, ringLabelsGroup);
+    }
   });
   updateLabelScale(panZoom.getZoom());
 }
