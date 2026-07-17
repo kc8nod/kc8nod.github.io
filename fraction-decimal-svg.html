@@ -42,7 +42,8 @@
   }
   
   .decimal-label text,
-  .mm-label text {
+  .mm-label text,
+  .text-label text {
     font-size: small;
     text-anchor: middle;
     dominant-baseline: middle;
@@ -358,6 +359,7 @@ function drawLabels(ringIndex, sliceLabels, endAngles, drawLeaders = true, radia
         const lineStartRadius = outerRadius - (outerRadius - innerRadius) / 5;
         const x1 = cx + lineStartRadius * Math.cos(labelAngle);
         const y1 = cy + lineStartRadius * Math.sin(labelAngle);
+        const lineEndRadius = ringBoundaries[fractionRings.length] + 10;
         const x2 = cx + lineEndRadius * Math.cos(labelAngle);
         const y2 = cy + lineEndRadius * Math.sin(labelAngle);
         
@@ -524,13 +526,25 @@ for (let ringIndex = 0; ringIndex < fractionRings.length; ringIndex++) {
 
 // Letter Drill Ring
 {
-  const endAngles = letterDrillSizes.map(v => startOffset - (v / 1) * 2 * Math.PI);
-  const angles = [startOffset-0.53, ...endAngles];
-  const labelAngles = endAngles;
+  const labelAngles = letterDrillSizes.map(v => startOffset - (v / 1) * 2 * Math.PI);
+  const angles = [labelAngles[0]+0.02, (labelAngles[42] + labelAngles[43])/2, labelAngles[labelAngles.length-1]-0.02];
   const labels = letters.map(letter => createLabel('text', letter));
   const idx = rings.length;
   
   rings.push({ ringIndex: idx, angles, sliceLabels: labels, labelAngles, drawLeaders: false, radialAngle: true, hue: 0, collapsed: false });
+}
+
+// Tap Hole Ring
+{
+  const labelAngles = [];
+  const labels = [];
+  for (const [tapName, tapSize] of taps) {
+    const angle = startOffset - (tapSize / 1) * 2 * Math.PI;
+    labelAngles.push(angle);
+    labels.push(createLabel('text', tapName));
+  }
+  const angles = [labelAngles[0]+0.02, labelAngles[labelAngles.length-1]-0.02];
+  rings.push({ ringIndex: rings.length, angles, sliceLabels: labels, labelAngles, drawLeaders: false, radialAngle: true, hue: 120, collapsed: false });
 }
 
 // Calculate ring spacing
@@ -538,7 +552,6 @@ const totalRings = rings.length;
 let ringBoundaries = new Array(totalRings + 1)
   .fill(0)
   .map((_, idx) => holeRadius + ((outermostRadius - holeRadius) * idx) / totalRings);
-const lineEndRadius = ringBoundaries[Math.max(totalRings - 2, 0)] + 2;
 const COLLAPSED_RING_THICKNESS = 0.2;
 
 function updateRingBoundaries() {
@@ -618,7 +631,7 @@ function relayoutRingLabels(ring) {
   }
 
   const { innerRadius, outerRadius } = getRingSlotRadii(ring.ringIndex);
-  const labels = ringLabelsGroup.querySelectorAll('.fraction-label, .decimal-label, .mm-label');
+  const labels = ringLabelsGroup.querySelectorAll('.fraction-label, .decimal-label, .mm-label, .text-label');
   const lines = ringLabelsGroup.querySelectorAll('line');
   let labelCursor = 0;
   let lineCursor = 0;
@@ -657,6 +670,7 @@ function relayoutRingLabels(ring) {
         const lineStartRadius = outerRadius - (outerRadius - innerRadius) / 5;
         const x1 = cx + lineStartRadius * Math.cos(labelAngle);
         const y1 = cy + lineStartRadius * Math.sin(labelAngle);
+        const lineEndRadius = ringBoundaries[fractionRings.length] + 10; // Extend line beyond outer radius
         const x2 = cx + lineEndRadius * Math.cos(labelAngle);
         const y2 = cy + lineEndRadius * Math.sin(labelAngle);
         line.setAttribute('x1', x1);
@@ -735,7 +749,7 @@ function updateLabelScale(zoom) {
     label.setAttribute('transform', `rotate(${-rotationDeg}) scale(${labelScale})`);
   });
 
-  chartGroup.querySelectorAll('.decimal-label .label-content, .mm-label .label-content').forEach((label) => {
+  chartGroup.querySelectorAll('.decimal-label .label-content, .mm-label .label-content, .text-label .label-content').forEach((label) => {
     label.setAttribute('transform', `scale(${labelScale})`);
   });
 }
