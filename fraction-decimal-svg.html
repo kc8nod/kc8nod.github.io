@@ -379,15 +379,26 @@ function createLabel(type, value) {
     denText.setAttribute('dy', '0.5em');
     denText.textContent = value.denominator;
     contentGroup.appendChild(denText);
-  } else if (type === 'decimal' || type === 'mm') {
+  } else {
+
+    const rect = createSVGElement('rect');
+    rect.setAttribute('y', '-1.2em');
+    rect.setAttribute('height', '2.4em');
+    rect.setAttribute('fill', 'url(#labelGrad)');
+
     const text = createSVGElement('text');
-    text.textContent = type === 'decimal' ? value.toFixed(3) : value.toFixed(1) + ' ㎜';
-    group.classList.add(type === 'decimal' ? 'decimal-label' : 'mm-label');
-    contentGroup.appendChild(text);
-  } else if (type === 'text') {
-    const text = createSVGElement('text');
-    text.textContent = value;
-    group.classList.add('text-label');
+    if (type === 'decimal' || type === 'mm') {
+      text.textContent = type === 'decimal' ? value.toFixed(3) : value.toFixed(1) + ' ㎜';
+      group.classList.add(type === 'decimal' ? 'decimal-label' : 'mm-label');
+    } else if (type === 'text') {
+      text.textContent = value;
+      group.classList.add('text-label');
+    }
+
+    const width = text.textContent.length * 0.6; // Approximate width in em
+    rect.setAttribute('x', (-width / 2) + 'em');
+    rect.setAttribute('width', width + 'em');
+    contentGroup.appendChild(rect);
     contentGroup.appendChild(text);
   }
 
